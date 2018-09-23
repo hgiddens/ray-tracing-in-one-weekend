@@ -1,35 +1,13 @@
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <optional>
+#include <vector>
 
 #include "colour.hpp"
+#include "object_list.hpp"
 #include "ray.hpp"
-
-class sphere final {
-    vec3 const centre;
-    double const radius;
-public:
-    sphere(vec3 const& centre, double radius);
-    std::optional<double> hit(ray const& r) const;
-};
-
-sphere::sphere(vec3 const& centre, double radius) : centre(centre), radius(radius) {}
-
-std::optional<double> sphere::hit(ray const& ray) const {
-    vec3 const oc = ray.origin() - centre;
-    double const
-        a = ray.direction().dot(ray.direction()),
-        b = 2.0 * oc.dot(ray.direction()),
-        c = oc.dot(oc) - radius * radius,
-        discriminant = b * b - 4 * a * c;
-
-    if (discriminant < 0) {
-        return {};
-    } else {
-        double const result = (-b - std::sqrt(discriminant)) / (2 * a);
-        return {result};
-    }
-}
+#include "sphere.hpp"
 
 namespace {
     // convert [0, 1] colour plane to [0, 256)
@@ -37,13 +15,12 @@ namespace {
         return int(255.99*f);
     }
 
-    colour ray_colour(ray const& r) {
-        sphere const world{vec3{0, 0, -1}, 0.5};
-        auto const result = world.hit(r);
-        if (result && *result > 0) {
-            auto const n = (r.point_at_parameter(*result) - vec3{0, 0, -1}).unit_vector();
-            auto const scaled = 0.5 * vec3{n.x() + 1, n.y() + 1, n.z() + 1};
-            return {scaled.x(), scaled.y(), scaled.z()};
+    colour ray_colour(ray const& r, object const& world) {
+        auto const result = world.hit(r, 0, std::numeric_limits<double>::max());
+        if (result) {
+            auto const& normal = result->normal;
+            auto const result = 0.5 * vec3{normal.x() + 1, normal.y() + 1, normal.z() + 1};
+            return { result.x(), result.y(), result.z() };
         } else {
             auto const unit_direction = r.direction().unit_vector();
             auto const t = 0.5 * (unit_direction.y() + 1.0);
@@ -68,6 +45,11 @@ int main() {
         horizontal{4.0, 0.0, 0.0}, // width of the viewport
         vertical{0.0, 2.0, 0.0}, // height of the viewport
         origin{0.0, 0.0, 0.0};
+
+    std::vector<std::unique_ptr<object>> objects;
+    objects.emplace_back(new sphere{{0, 0, -1}, 0.5});
+    objects.emplace_back(new sphere{{0, -100.5, -1}, 100});
+    object_list const world{std::move(objects)};
     
     for (int j = ny - 1; j >= 0; --j) {
         for (int i = 0; i < nx; ++i) {
@@ -77,7 +59,7 @@ int main() {
             // This is *not* a unit vector which apparently allows for simpler/faster code?
             vec3 const direction = lower_left_corner + u * horizontal + v * vertical;
             ray const ray{origin, direction};
-            colour const colour = ray_colour(ray);
+            colour const colour = ray_colour(ray, world);
             std::cout << convert(colour.red()) << " "
                       << convert(colour.green()) << " "
                       << convert(colour.blue()) << "\n";
