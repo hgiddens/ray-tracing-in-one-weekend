@@ -1,6 +1,7 @@
 #include "colour.hpp"
 
 #include <cassert>
+#include <cmath>
 
 colour::colour(double white) : colour(white, white, white) {}
 
@@ -15,11 +16,17 @@ colour::colour(double const red, double const green, double const blue) {
     elements[2] = blue;
 }
 
+colour colour::gamma2() const {
+    return { std::sqrt(red()), std::sqrt(green()), std::sqrt(blue()) };
+}
+
 colour operator+(colour const& a, colour const& b) {
     return { a.red() + b.red(), a.green() + b.green(), a.blue() + b.blue() };
 }
 
 colour operator*(colour const& c, double d) {
+    assert(d >= 0);
+    assert(d <= 1);
     return { c.red() * d, c.green() * d, c.blue() * d };
 }
 

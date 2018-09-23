@@ -13,17 +13,27 @@
 #include "supersampler.hpp"
 
 namespace {
+    // deal with shadow acne
+    const double time_epsilon = 0.001;
+    
     // convert [0, 1] colour plane to [0, 256)
     int convert(double const f) {
         return int(255.99*f);
     }
 
-    colour ray_colour(ray const& r, object const& world) {
-        auto const result = world.hit(r, 0, std::numeric_limits<double>::max());
+    vec3 random_in_unit_sphere(std::mt19937& mt) {
+        std::uniform_real_distribution<double> dist{-1, 1};
+        while (true) {
+            vec3 const candidate{dist(mt), dist(mt), dist(mt)};
+            if (candidate.squared_length() < 1) return candidate;
+        }
+    }
+
+    colour ray_colour(std::mt19937& mt, ray const& r, object const& world) {
+        auto const result = world.hit(r, time_epsilon, std::numeric_limits<double>::max());
         if (result) {
-            auto const& normal = result->normal;
-            auto const result = 0.5 * vec3{normal.x() + 1, normal.y() + 1, normal.z() + 1};
-            return { result.x(), result.y(), result.z() };
+            vec3 const target = result->p + result->normal + random_in_unit_sphere(mt);
+            return 0.5 * ray_colour(mt, ray{result->p, target - result->p}, world);
         } else {
             auto const unit_direction = r.direction().unit_vector();
             auto const t = 0.5 * (unit_direction.y() + 1.0);
@@ -46,7 +56,7 @@ namespace {
 // into the screen is negative z
 
 int main() {
-    int const nx = 200, ny = 100, ns = 100;
+    int const nx = 400, ny = 200, ns = 100;
 
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
 
@@ -66,10 +76,10 @@ int main() {
                     u = ii / double(nx),
                     v = jj / double(ny);
                 ray const ray = camera.get_ray(u, v);
-                supersampler.add_sample(ray_colour(ray, world));
+                supersampler.add_sample(ray_colour(mt, ray, world));
             }
             
-            colour const colour = supersampler.value();
+            colour const colour = supersampler.value().gamma2();
             std::cout << convert(colour.red()) << " "
                       << convert(colour.green()) << " "
                       << convert(colour.blue()) << "\n";

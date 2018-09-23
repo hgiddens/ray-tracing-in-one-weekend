@@ -8,6 +8,8 @@ public:
     double red() const { return elements[0]; }
     double green() const { return elements[1]; }
     double blue() const { return elements[2]; }
+
+    colour gamma2() const;
 };
 
 colour operator+(colour const& a, colour const& b);
