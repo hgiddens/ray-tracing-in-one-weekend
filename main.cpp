@@ -2,12 +2,15 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <random>
 #include <vector>
 
+#include "camera.hpp"
 #include "colour.hpp"
 #include "object_list.hpp"
 #include "ray.hpp"
 #include "sphere.hpp"
+#include "supersampler.hpp"
 
 namespace {
     // convert [0, 1] colour plane to [0, 256)
@@ -28,6 +31,13 @@ namespace {
             return (1.0 - t) * white + t * blue;
         }
     }
+
+    object_list build_world() {
+        std::vector<std::unique_ptr<object>> objects;
+        objects.emplace_back(new sphere{{0, 0, -1}, 0.5});
+        objects.emplace_back(new sphere{{0, -100.5, -1}, 100});
+        return std::move(objects);
+    }
 }
 
 // eye is at origin, center of image
@@ -36,30 +46,30 @@ namespace {
 // into the screen is negative z
 
 int main() {
-    int const nx = 1000, ny = 500;
+    int const nx = 200, ny = 100, ns = 100;
 
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
 
-    vec3 const
-        lower_left_corner{-2.0, -1.0, -1.0}, // point
-        horizontal{4.0, 0.0, 0.0}, // width of the viewport
-        vertical{0.0, 2.0, 0.0}, // height of the viewport
-        origin{0.0, 0.0, 0.0};
-
-    std::vector<std::unique_ptr<object>> objects;
-    objects.emplace_back(new sphere{{0, 0, -1}, 0.5});
-    objects.emplace_back(new sphere{{0, -100.5, -1}, 100});
-    object_list const world{std::move(objects)};
+    object const& world = build_world();
+    camera camera;
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_real_distribution<double> dist{0, 1};
     
     for (int j = ny - 1; j >= 0; --j) {
         for (int i = 0; i < nx; ++i) {
-            double const
-                u = double(i) / double(nx),
-                v = double(j) / double(ny);
-            // This is *not* a unit vector which apparently allows for simpler/faster code?
-            vec3 const direction = lower_left_corner + u * horizontal + v * vertical;
-            ray const ray{origin, direction};
-            colour const colour = ray_colour(ray, world);
+            supersampler supersampler;
+            for (int s = 0; s < ns; ++s) {
+                double const
+                    ii = i + dist(mt),
+                    jj = j + dist(mt),
+                    u = ii / double(nx),
+                    v = jj / double(ny);
+                ray const ray = camera.get_ray(u, v);
+                supersampler.add_sample(ray_colour(ray, world));
+            }
+            
+            colour const colour = supersampler.value();
             std::cout << convert(colour.red()) << " "
                       << convert(colour.green()) << " "
                       << convert(colour.blue()) << "\n";
