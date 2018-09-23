@@ -1,0 +1,5 @@
+*.d
+*.d.*
+*.o
+raytracer
+out.ppm
