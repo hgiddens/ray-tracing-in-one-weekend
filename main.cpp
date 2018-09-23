@@ -1,4 +1,6 @@
+#include <cmath>
 #include <iostream>
+#include <optional>
 
 #include "colour.hpp"
 #include "ray.hpp"
@@ -8,19 +10,25 @@ class sphere final {
     double const radius;
 public:
     sphere(vec3 const& centre, double radius);
-    bool hit(ray const& r) const;
+    std::optional<double> hit(ray const& r) const;
 };
 
 sphere::sphere(vec3 const& centre, double radius) : centre(centre), radius(radius) {}
 
-bool sphere::hit(ray const& ray) const {
+std::optional<double> sphere::hit(ray const& ray) const {
     vec3 const oc = ray.origin() - centre;
     double const
         a = ray.direction().dot(ray.direction()),
         b = 2.0 * oc.dot(ray.direction()),
         c = oc.dot(oc) - radius * radius,
         discriminant = b * b - 4 * a * c;
-    return discriminant > 0;
+
+    if (discriminant < 0) {
+        return {};
+    } else {
+        double const result = (-b - std::sqrt(discriminant)) / (2 * a);
+        return {result};
+    }
 }
 
 namespace {
@@ -31,12 +39,17 @@ namespace {
 
     colour ray_colour(ray const& r) {
         sphere const world{vec3{0, 0, -1}, 0.5};
-        if (world.hit(r)) return { 1, 0, 0 };
-        
-        auto const unit_direction = r.direction().unit_vector();
-        auto const t = 0.5 * (unit_direction.y() + 1.0);
-        colour const white{1.0}, blue{0.5, 0.7, 1.0};
-        return (1.0 - t) * white + t * blue;
+        auto const result = world.hit(r);
+        if (result && *result > 0) {
+            auto const n = (r.point_at_parameter(*result) - vec3{0, 0, -1}).unit_vector();
+            auto const scaled = 0.5 * vec3{n.x() + 1, n.y() + 1, n.z() + 1};
+            return {scaled.x(), scaled.y(), scaled.z()};
+        } else {
+            auto const unit_direction = r.direction().unit_vector();
+            auto const t = 0.5 * (unit_direction.y() + 1.0);
+            colour const white{1.0}, blue{0.5, 0.7, 1.0};
+            return (1.0 - t) * white + t * blue;
+        }
     }
 }
 
@@ -46,7 +59,7 @@ namespace {
 // into the screen is negative z
 
 int main() {
-    int const nx = 200, ny = 100;
+    int const nx = 1000, ny = 500;
 
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
 
@@ -61,7 +74,9 @@ int main() {
             double const
                 u = double(i) / double(nx),
                 v = double(j) / double(ny);
-            ray const ray{origin, lower_left_corner + u * horizontal + v * vertical};
+            // This is *not* a unit vector which apparently allows for simpler/faster code?
+            vec3 const direction = lower_left_corner + u * horizontal + v * vertical;
+            ray const ray{origin, direction};
             colour const colour = ray_colour(ray);
             std::cout << convert(colour.red()) << " "
                       << convert(colour.green()) << " "
