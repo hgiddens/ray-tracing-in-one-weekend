@@ -4,10 +4,13 @@
 
 #include "ray.hpp"
 
+class material;
+
 struct hit_record {
     double const t;
     vec3 const p;
     vec3 const normal;
+    material const& material;
 };
 
 class object {

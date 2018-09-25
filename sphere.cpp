@@ -3,8 +3,8 @@
 #include <cassert>
 #include <cmath>
 
-sphere::sphere(vec3 const& centre, double radius)
-    : centre(centre), radius(radius) {}
+sphere::sphere(vec3 const& centre, double radius, std::unique_ptr<material const> mat)
+    : centre(centre), radius(radius), mat(std::move(mat)) {}
 
 std::optional<hit_record> sphere::hit(ray const& r, double const t_min, double const t_max) const {
     assert(t_min <= t_max);
@@ -24,7 +24,8 @@ std::optional<hit_record> sphere::hit(ray const& r, double const t_min, double c
             return {{
                 first_hit,
                 hit,
-                (hit - centre) / radius
+                (hit - centre) / radius,
+                *mat
             }};
         }
 
@@ -34,7 +35,8 @@ std::optional<hit_record> sphere::hit(ray const& r, double const t_min, double c
             return {{
                 second_hit,
                 hit,
-                (hit - centre) / radius
+                (hit - centre) / radius,
+                *mat
             }};
         }
     }
