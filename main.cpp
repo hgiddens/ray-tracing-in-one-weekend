@@ -48,8 +48,11 @@ namespace {
     object_list build_world(std::mt19937& mt) {
         std::vector<std::unique_ptr<object>> objects;
         objects.emplace_back(new sphere{{0, 0, -1}, 0.5, std::make_unique<lambertian>(mt, vec3{0.1, 0.2, 0.5})});
+
         objects.emplace_back(new sphere{{0, -100.5, -1}, 100, std::make_unique<lambertian>(mt, vec3{0.8, 0.8, 0})});
-        objects.emplace_back(new sphere{{1, 0, -1}, 0.5, std::make_unique<metal>(mt, vec3{0.8, 0.6, 0.2}, 1.0)});
+
+        objects.emplace_back(new sphere{{1, 0, -1}, 0.5, std::make_unique<metal>(mt, vec3{0.8, 0.6, 0.2}, 0.15)});
+
         objects.emplace_back(new sphere{{-1, 0, -1}, 0.5, std::make_unique<dielectric>(mt, 1.5)});
         objects.emplace_back(new sphere{{-1, 0, -1}, -0.45, std::make_unique<dielectric>(mt, 1.5)});
         return std::move(objects);
@@ -62,7 +65,7 @@ namespace {
 // into the screen is negative z
 
 int main() {
-    int const nx = 800, ny = 400, ns = 10;
+    int const nx = 800, ny = 400, ns = 1000;
 
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
 
@@ -70,7 +73,7 @@ int main() {
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> dist{0, 1};
     object const& world = build_world(mt);
-    camera camera;
+    camera camera{vec3{-2, 2, 1}, vec3{0, 0, -1}, vec3{0, 1, 0}, 20, double(nx) / double(ny)};;
     
     for (int j = ny - 1; j >= 0; --j) {
         for (int i = 0; i < nx; ++i) {
