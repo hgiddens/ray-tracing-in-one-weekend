@@ -23,7 +23,7 @@ $(target): $(objects)
 -include $(sources:.cpp=.d)
 
 clean:
-	rm -f *.o *.d $(target)
+	rm -f *.o *.d *.d.* $(target)
 
 run: $(target)
 	./$(target)
