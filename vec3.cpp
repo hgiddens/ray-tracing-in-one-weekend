@@ -9,6 +9,10 @@ vec3::vec3(double x, double y, double z) {
     elements[2] = z;
 }
 
+vec3 vec3::operator-() const {
+    return {-x(), -y(), -z()};
+}
+
 vec3 vec3::cross(vec3 const& that) const {
     return {
         y() * that.z() - z() * that.y(),

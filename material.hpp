@@ -14,10 +14,10 @@ struct scatter_record {
 };
 
 class material {
-    std::mt19937& mt;
     static std::uniform_real_distribution<double> dist;
 
 protected:
+    std::mt19937& mt;
     material(std::mt19937& mt);
     vec3 random_in_unit_sphere() const;
 
@@ -39,5 +39,13 @@ class metal final : public material {
     double const fuzziness;
 public:
     metal(std::mt19937& mt, vec3 const& albedo, double fuzziness);
+    std::optional<scatter_record> scatter(ray const& ray, hit_record const& hit) const override;
+};
+
+class dielectric final : public material {
+    static std::uniform_real_distribution<double> reflect_dist;
+    double const refractive_index;
+public:
+    dielectric(std::mt19937& mt, double refractive_index);
     std::optional<scatter_record> scatter(ray const& ray, hit_record const& hit) const override;
 };

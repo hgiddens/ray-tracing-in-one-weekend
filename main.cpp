@@ -47,10 +47,11 @@ namespace {
 
     object_list build_world(std::mt19937& mt) {
         std::vector<std::unique_ptr<object>> objects;
-        objects.emplace_back(new sphere{{0, 0, -1}, 0.5, std::make_unique<lambertian>(mt, vec3{0.8, 0.3, 0.3})});
+        objects.emplace_back(new sphere{{0, 0, -1}, 0.5, std::make_unique<lambertian>(mt, vec3{0.1, 0.2, 0.5})});
         objects.emplace_back(new sphere{{0, -100.5, -1}, 100, std::make_unique<lambertian>(mt, vec3{0.8, 0.8, 0})});
         objects.emplace_back(new sphere{{1, 0, -1}, 0.5, std::make_unique<metal>(mt, vec3{0.8, 0.6, 0.2}, 1.0)});
-        objects.emplace_back(new sphere{{-1, 0, -1}, 0.5, std::make_unique<metal>(mt, vec3{0.8, 0.8, 0.8}, 0.3)});
+        objects.emplace_back(new sphere{{-1, 0, -1}, 0.5, std::make_unique<dielectric>(mt, 1.5)});
+        objects.emplace_back(new sphere{{-1, 0, -1}, -0.45, std::make_unique<dielectric>(mt, 1.5)});
         return std::move(objects);
     }
 }
@@ -61,7 +62,7 @@ namespace {
 // into the screen is negative z
 
 int main() {
-    int const nx = 400, ny = 200, ns = 1000;
+    int const nx = 800, ny = 400, ns = 10;
 
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
 

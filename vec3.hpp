@@ -8,6 +8,8 @@ public:
     double y() const { return elements[1]; }
     double z() const { return elements[2]; }
 
+    vec3 operator-() const;
+
     vec3 cross(vec3 const& that) const;
     double dot(vec3 const& that) const;
     double length() const;
