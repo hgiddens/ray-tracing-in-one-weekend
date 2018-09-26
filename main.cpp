@@ -73,7 +73,13 @@ int main() {
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> dist{0, 1};
     object const& world = build_world(mt);
-    camera camera{vec3{-2, 2, 1}, vec3{0, 0, -1}, vec3{0, 1, 0}, 20, double(nx) / double(ny)};;
+    vec3 const
+        from{3, 3, 2},
+        at{0, 0, -1};
+    double const
+        dist_to_focus = (from - at).length(),
+        aperture = 0.25;
+    camera camera{mt, from, at, vec3{0, 1, 0}, 20, double(nx) / double(ny), aperture, dist_to_focus};
     
     for (int j = ny - 1; j >= 0; --j) {
         for (int i = 0; i < nx; ++i) {

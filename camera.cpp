@@ -11,30 +11,34 @@ namespace {
     double half_width(double const vfov, double const aspect) {
         return aspect * half_height(vfov);
     }
+}
 
-    vec3 w(vec3 const from, vec3 const at) {
-        return (from - at).unit_vector();
-    }
-
-    vec3 u(vec3 const from, vec3 const at, vec3 const up) {
-        return up.cross(w(from, at)).unit_vector();
-    }
-
-    vec3 v(vec3 const from, vec3 const at, vec3 const up) {
-        return w(from, at).cross(u(from, at, up));
+vec3 camera::random_in_unit_disk() const {
+    while (true) {
+        vec3 const p = vec3{dist(mt), dist(mt), 0};
+        if (p.dot(p) < 1) return p;
     }
 }
 
-camera::camera(vec3 const from, vec3 const at, vec3 const up, double const vfov, double const aspect)
-    : origin{from},
-      lower_left_corner{from - half_width(vfov, aspect) * u(from, at, up) - half_height(vfov) * v(from, at, up) - w(from, at)},
-      horizontal{2 * half_width(vfov, aspect) * u(from, at, up)},
-      vertical{2 * half_height(vfov) * v(from, at, up)} {}
+std::uniform_real_distribution<double> camera::dist{-1, 1};
 
-ray camera::get_ray(double const u, double const v) const {
+camera::camera(std::mt19937& mt, vec3 const from, vec3 const at, vec3 const up, double const vfov, double const aspect, double const aperture, double const focus_dist)
+    : origin{from},
+      w{(from - at).unit_vector()},
+      u{up.cross(w).unit_vector()},
+      v{w.cross(u)},
+      lower_left_corner{from - half_width(vfov, aspect) * focus_dist * u - half_height(vfov) * focus_dist * v - focus_dist * w},
+      horizontal{2 * half_width(vfov, aspect) * focus_dist * u},
+      vertical{2 * half_height(vfov) * focus_dist * v},
+      lens_radius{aperture / 2},
+      mt(mt) {}
+
+ray camera::get_ray(double const s, double const t) const {
+    vec3 const rd = lens_radius * random_in_unit_disk();
+    vec3 const offset = u * rd.x() + v * rd.y();
     return {
-        origin,
+        origin + offset,
         // This is *not* a unit vector which apparently allows for simpler/faster code?
-        lower_left_corner + u * horizontal + v * vertical - origin
+        lower_left_corner + s * horizontal + t * vertical - origin - offset
     };
 }
