@@ -1,7 +1,7 @@
 module Vector (Vec3(..),
                cross,
                dot,
-               scale,
+               fromVector,
                squaredLength,
                unit,
                vec,
@@ -42,8 +42,9 @@ cross (Vec3 x y z) (Vec3 x' y' z') =
 dot :: Num a => Vec3 a -> Vec3 a -> a
 dot (Vec3 x y z) (Vec3 x' y' z') = (x * x') + (y * y') + (z * z')
 
-scale :: Num a => a -> Vec3 a -> Vec3 a
-scale t = fmap (t*)
+-- TODO: monotraversable
+fromVector :: (a -> a -> a -> b) -> Vec3 a -> b
+fromVector f (Vec3 x y z) = f x y z
 
 squaredLength :: Num a => Vec3 a -> a
 squaredLength v = dot v v
