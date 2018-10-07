@@ -13,22 +13,15 @@ instance Show PixelColour where
     show (PixelColour c) = let (r,g,b) = bpp8 c
                            in (show r) ++ " " ++ (show g) ++ " " ++ (show b)
 
--- todo: numeric limits
-maxValue :: RealFloat a => a
-maxValue = x
-  where n = floatDigits x
-        b = floatRadix x
-        (_, u) = floatRange x
-        x = encodeFloat (b^n - 1) (u - n)
-
 -- todo: the vector -> colour conversion is gnarly and requires the real class :(
--- todo: the maxValue thing also drags in real
 rayColour :: (Ord a, RealFloat a) => Prim a -> Ray a -> Colour
 rayColour world ray@(Ray _ direction) =
-    convert $ case hit world ray 0 maxValue of
-                Just (Hit _ _ n) -> 0.5 * (n + 1)
+    convert $ case hit world ray tMin tMax of
+                Just (Hit {hitNormal}) -> 0.5 * (hitNormal + 1)
                 Nothing -> background
     where
+      tMin = Just 0
+      tMax = Nothing
       convert = fromVector colour . fmap realToFrac
       background = let (Vec3 _ y _) = unit direction
                        t' = 0.5 * (y + 1)
@@ -43,8 +36,8 @@ main = do
   putStrLn "255"
   traverse_ (print . PixelColour . rayColour world . ray) indices
     where
-      nx = 200
-      ny = 100
+      nx = 200 :: Int
+      ny = 100 :: Int
       indices = [(i, j) | j <- [(ny - 1), (ny - 2) .. 0], i <- [0 .. (nx - 1)]]
 
       lowerLeft, horizontal, vertical, origin :: Vec3 Double

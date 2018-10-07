@@ -9,10 +9,7 @@ module Vector (Vec3(..),
 
 import Control.Applicative (liftA2)
 
-data Vec3 a = Vec3 a a a
-
-instance Functor Vec3 where
-    fmap f (Vec3 x y z) = Vec3 (f x) (f y) (f z)
+data Vec3 a = Vec3 a a a deriving (Functor, Foldable)
 
 instance Applicative Vec3 where
     liftA2 f (Vec3 x y z) (Vec3 x' y' z') = Vec3 (f x x') (f y y') (f z z')
@@ -27,7 +24,6 @@ instance Num a => Num (Vec3 a) where
     signum = fmap signum
     fromInteger = pure . fromInteger
 
-
 instance Fractional a => Fractional (Vec3 a) where
     (/) = liftA2 (/)
     fromRational = pure . fromRational
@@ -40,9 +36,8 @@ cross (Vec3 x y z) (Vec3 x' y' z') =
     in Vec3 x'' y'' z''
 
 dot :: Num a => Vec3 a -> Vec3 a -> a
-dot (Vec3 x y z) (Vec3 x' y' z') = (x * x') + (y * y') + (z * z')
+dot a b = sum (a * b)
 
--- TODO: monotraversable
 fromVector :: (a -> a -> a -> b) -> Vec3 a -> b
 fromVector f (Vec3 x y z) = f x y z
 
