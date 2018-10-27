@@ -2,6 +2,9 @@ module Colour (Colour, bpp8, colour) where
 
 data Colour = Colour Double Double Double Int
 
+instance Semigroup Colour where
+    (Colour r g b c) <> (Colour r' g' b' c') = Colour (r + r') (g + g') (b + b') (c + c')
+
 -- TODO: error
 colour :: Double -> Double -> Double -> Colour
 colour r g b | ok(r) && ok(g) && ok(b) = Colour r g b 1

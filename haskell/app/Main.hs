@@ -1,7 +1,9 @@
 module Main where
 
-import Data.Foldable (traverse_)
+import Data.Foldable (foldl1, traverse_)
+import System.Random (newStdGen)
 
+import Camera (Camera, Rasterer(..), defaultCamera, rasterRays)
 import Colour (Colour, bpp8, colour)
 import Ray (Ray(..))
 import Prim (Hit(..), Prim, hit, sphere)
@@ -32,26 +34,13 @@ rayColour world ray@(Ray _ direction) =
 main :: IO ()
 main = do
   putStrLn "P3"
-  putStrLn $ (show nx) ++ " " ++ (show ny)
+  putStrLn $ (show (rastererHorizontalPixels rasterer)) ++ " " ++ (show (rastererVerticalPixels rasterer))
   putStrLn "255"
-  traverse_ (print . PixelColour . rayColour world . ray) indices
+  gen <- newStdGen
+  let rays = rasterRays rasterer camera gen
+  traverse_ (print . PixelColour . mergeColours . fmap (rayColour world)) rays
     where
-      nx = 200 :: Int
-      ny = 100 :: Int
-      indices = [(i, j) | j <- [(ny - 1), (ny - 2) .. 0], i <- [0 .. (nx - 1)]]
-
-      lowerLeft, horizontal, vertical, origin :: Vec3 Double
-      lowerLeft = Vec3 (-2) (-1) (-1)
-      horizontal = Vec3 4 0 0
-      vertical = Vec3 0 2 0
-      origin = vec 0
-
+      camera = defaultCamera :: Camera Double
+      rasterer = Rasterer 400 200
       world = sphere (Vec3 0 0 (-1)) 0.5 <> sphere (Vec3 0 (-100.5) (-1)) 100
-
-      ray (i,j) =
-          let i' = fromIntegral i
-              u = i' / (fromIntegral nx)
-              j' = fromIntegral j
-              v = j' / (fromIntegral ny)
-              direction = lowerLeft + (vec u * horizontal) + (vec v * vertical)
-          in Ray origin direction
+      mergeColours = foldl1 (<>)

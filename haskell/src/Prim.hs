@@ -23,7 +23,8 @@ newtype Prim a = Prim [HitFn a] deriving (Semigroup, Monoid)
 hit :: Ord a => Prim a -> Ray a -> Maybe a -> Maybe a -> Maybe (Hit a)
 hit (Prim prims) ray tMin tMax = 
     let testHit prim = prim ray tMin tMax
-        hits = prims >>= maybeToList . testHit
+        possibleHits = fmap testHit prims -- todo: consider parallel evaluation
+        hits = possibleHits >>= maybeToList
     in case hits of [] -> Nothing
                     _ -> Just (minimumBy (compare `on` hitTime) hits)
 

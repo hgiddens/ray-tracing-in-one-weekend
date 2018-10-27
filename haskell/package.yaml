@@ -20,10 +20,13 @@ default-extensions:
 - DeriveFunctor
 - GeneralizedNewtypeDeriving
 - NamedFieldPuns  
+- RecordWildCards
 
 dependencies:
 - base >= 4.7 && < 5
 - mono-traversable
+- mtl
+- random
 
 library:
   ghc-options:
