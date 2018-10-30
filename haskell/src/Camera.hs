@@ -30,7 +30,7 @@ cameraRay Camera{..} u v = let origin = cameraOrigin
                                direction = cameraLowerLeftCorner + (vec u * cameraHorizontal) + (vec v * cameraVertical) - cameraOrigin
                            in Ray origin direction
 
--- todo: terrible name
+-- todo: terrible name; viewport?
 data Rasterer = Rasterer { rastererHorizontalPixels :: Int
                          , rastererVerticalPixels :: Int
                          }
