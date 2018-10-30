@@ -5,7 +5,7 @@ module Camera (Camera,
 
 import Control.Monad (replicateM)
 import Control.Monad.State (runState, state)
-import System.Random (Random, RandomGen, random)
+import System.Random (RandomGen, random)
 
 import Ray (Ray(..))
 import Vector (Vec3(..), vec)
@@ -37,7 +37,7 @@ data Rasterer = Rasterer { rastererHorizontalPixels :: Int
 
 -- todo: non-empty list
 -- todo: return 2d array or whatever not a list
-rasterRays :: (Fractional a, Random a, RandomGen g) => Rasterer -> Camera a -> g -> [[Ray a]]
+rasterRays :: (Fractional a, RandomGen g) => Rasterer -> Camera a -> g -> [[Ray a]]
 rasterRays rasterer camera gen = runRandom [rays i j | j <- [(ny - 1), (ny - 2) .. 0], i <- [0 .. (nx - 1)]]
     where 
       nx = rastererHorizontalPixels rasterer
@@ -48,8 +48,12 @@ rasterRays rasterer camera gen = runRandom [rays i j | j <- [(ny - 1), (ny - 2) 
       -- the randomly sampling of rays for the (i, j) pixel
       rays i j = replicateM (cameraSamples camera) (cameraRay camera <$> adjust i nx' <*> adjust j ny')
 
+      -- random a in [0, 1)
+      randomOne g = let (d, a) = (random :: RandomGen g => g -> (Double, g)) g
+                    in (realToFrac d, a)
+
       -- converts the a'th pixel (of b) into the viewport dimension (with rays randomly scattered within the pixel)
       adjust a b = let scale x = (fromIntegral a + x) / b
-                   in fmap scale (state random)
+                   in fmap scale (state randomOne)
 
       runRandom states = let (c, _) = runState (sequence states) gen in c
