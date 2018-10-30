@@ -1,4 +1,4 @@
-module Colour (Colour, bpp8, colour) where
+module Colour (Colour, bpp8, colour, gamma2, scaleColour) where
 
 data Colour = Colour Double Double Double Int
 
@@ -19,3 +19,15 @@ bpp8 (Colour r g b count) =
         g' = g / scale
         b' = b / scale
     in (int r', int g', int b')
+
+gamma2 :: Colour -> (Int, Int, Int)
+gamma2 (Colour r g b count) =
+    let scale = fromIntegral count
+        int = truncate . (255.99*) . sqrt
+        r' = r / scale
+        g' = g / scale
+        b' = b / scale
+    in (int r', int g', int b')
+
+scaleColour :: Double -> Colour -> Colour
+scaleColour x (Colour r g b c) = Colour (r * x) (g * x) (b * x) c

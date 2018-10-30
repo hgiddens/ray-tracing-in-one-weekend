@@ -8,6 +8,8 @@ module Vector (Vec3(..),
                vectorLength) where
 
 import Control.Applicative (liftA2)
+import Control.Monad.State (runState, state)
+import System.Random (Random, random, randomR)
 
 data Vec3 a = Vec3 a a a deriving (Functor, Foldable)
 
@@ -27,6 +29,14 @@ instance Num a => Num (Vec3 a) where
 instance Fractional a => Fractional (Vec3 a) where
     (/) = liftA2 (/)
     fromRational = pure . fromRational
+
+instance Random a => Random (Vec3 a) where
+    randomR (Vec3 loX loY loZ, Vec3 hiX hiY hiZ) =
+        let x = state (randomR (loX, hiX))
+            y = state (randomR (loY, hiY))
+            z = state (randomR (loZ, hiZ))
+        in runState (Vec3 <$> x <*> y <*> z)
+    random = runState (Vec3 <$> state random <*> state random <*> state random)
 
 cross :: Num a => Vec3 a -> Vec3 a -> Vec3 a
 cross (Vec3 x y z) (Vec3 x' y' z') =
