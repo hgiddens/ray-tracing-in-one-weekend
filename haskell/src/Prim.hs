@@ -1,5 +1,3 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-
 module Prim (Hit(..),
              Prim,
              hit,
