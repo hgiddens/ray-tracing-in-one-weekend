@@ -27,6 +27,7 @@ dependencies:
 - mono-traversable
 - mtl
 - random
+- transformers
 
 library:
   ghc-options:

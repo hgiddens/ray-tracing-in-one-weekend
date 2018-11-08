@@ -2,7 +2,10 @@ module Main where
 
 import Control.Monad (guard)
 import Control.Monad.State (State, evalState)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Data.Foldable (foldl1, traverse_)
+import Data.Maybe (fromMaybe)
 import System.Random (Random, RandomGen, newStdGen)
 
 import Camera (Camera, Rasterer(..), defaultCamera, rasterRays)
@@ -17,6 +20,9 @@ instance Show PixelColour where
     show (PixelColour c) = let (r,g,b) = gamma2 c
                            in (show r) ++ " " ++ (show g) ++ " " ++ (show b)
 
+fromMaybeT :: Functor m => a -> MaybeT m a -> m a
+fromMaybeT a m = fromMaybe a <$> runMaybeT m
+
 -- todo: the vector -> colour conversion is gnarly and requires the real class :(
 rayColour :: (Random a, RandomGen g, RealFloat a) => Prim a -> Ray a -> State g Colour
 rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
@@ -25,14 +31,12 @@ rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
       tMax = Nothing
       depthLimit = 50
 
-      hitColour depth ray hitRecord =
-          let thing = do guard (depth < depthLimit)
-                         interaction <- scatterRay (hitMaterial hitRecord) ray hitRecord
-                         pure $ do interaction' <- interaction
-                                   c <- go (depth + 1) (materialScattered interaction')
-                                   let (Vec3 x y z) = fmap realToFrac (materialAttenuation interaction')
-                                   pure (scaleColour x y z c)
-          in maybe (pure (colour 0 0 0)) id thing
+      hitColour depth ray hitRecord = fromMaybeT (colour 0 0 0) $ do
+        guard (depth < depthLimit)
+        interaction <- MaybeT (scatterRay (hitMaterial hitRecord) ray hitRecord)
+        c <- lift (go (depth + 1) (materialScattered interaction))
+        let (Vec3 x y z) = fmap realToFrac (materialAttenuation interaction)
+        pure (scaleColour x y z c)
 
       missColour = pure (convert background)
 
@@ -59,8 +63,8 @@ main = do
       camera = defaultCamera :: Camera Double
       rasterer = Rasterer 400 200
 
-      leftSphere = sphere (Vec3 (-1) 0 (-1)) 0.5 (metal (Vec3 0.8 0.8 0.8))
-      rightSphere = sphere (Vec3 1 0 (-1)) 0.5 (metal (Vec3 0.8 0.6 0.2))
+      leftSphere = sphere (Vec3 (-1) 0 (-1)) 0.5 (metal (Vec3 0.8 0.8 0.8) 0.3)
+      rightSphere = sphere (Vec3 1 0 (-1)) 0.5 (metal (Vec3 0.8 0.6 0.2) 1)
       middleSphere = sphere (Vec3 0 0 (-1)) 0.5 (lambertian (Vec3 0.8 0.3 0.3))
       bottomSphere = sphere (Vec3 0 (-100.5) (-1)) 100 (lambertian (Vec3 0.8 0.8 0))
 
