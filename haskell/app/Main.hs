@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Monad (guard)
+-- todo: i think this being lazy is why we need #all the memory
 import Control.Monad.State (State, evalState)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
@@ -11,7 +12,7 @@ import System.Random (Random, RandomGen, newStdGen)
 import Camera (Camera, Rasterer(..), defaultCamera, rasterRays)
 import Colour (Colour, colour, gamma2, scaleColour)
 import Ray (Ray(..))
-import Prim (Hit(..), MaterialInteraction(..), Prim, hit, lambertian, metal, scatterRay, sphere)
+import Prim (Hit(..), MaterialInteraction(..), Prim, dielectric, hit, lambertian, metal, scatterRay, sphere)
 import Vector (Vec3(..), fromVector, unit, vec)
 
 -- newtype for the show instance
@@ -63,9 +64,10 @@ main = do
       camera = defaultCamera :: Camera Double
       rasterer = Rasterer 400 200
 
-      leftSphere = sphere (Vec3 (-1) 0 (-1)) 0.5 (metal (Vec3 0.8 0.8 0.8) 0.3)
-      rightSphere = sphere (Vec3 1 0 (-1)) 0.5 (metal (Vec3 0.8 0.6 0.2) 1)
-      middleSphere = sphere (Vec3 0 0 (-1)) 0.5 (lambertian (Vec3 0.8 0.3 0.3))
+      leftSphere = (sphere (Vec3 (-1) 0 (-1)) 0.5 (dielectric 1.5)) <>
+                   (sphere (Vec3 (-1) 0 (-1)) (-0.45) (dielectric 1.5))
+      rightSphere = sphere (Vec3 1 0 (-1)) 0.5 (metal (Vec3 0.8 0.6 0.2) 0.1)
+      middleSphere = sphere (Vec3 0 0 (-1)) 0.5 (lambertian (Vec3 0.1 0.2 0.5))
       bottomSphere = sphere (Vec3 0 (-100.5) (-1)) 100 (lambertian (Vec3 0.8 0.8 0))
 
       world = leftSphere <> middleSphere <> rightSphere <> bottomSphere

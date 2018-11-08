@@ -2,6 +2,7 @@ module Vector (Vec3(..),
                cross,
                dot,
                fromVector,
+               reverseVector,
                squaredLength,
                unit,
                vec,
@@ -50,6 +51,9 @@ dot a b = sum (a * b)
 
 fromVector :: (a -> a -> a -> b) -> Vec3 a -> b
 fromVector f (Vec3 x y z) = f x y z
+
+reverseVector :: Num a => Vec3 a -> Vec3 a
+reverseVector = fmap negate
 
 squaredLength :: Num a => Vec3 a -> a
 squaredLength v = dot v v

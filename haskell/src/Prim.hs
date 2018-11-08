@@ -3,13 +3,18 @@
 module Prim (Hit(..),
              MaterialInteraction(..),
              Prim,
+             dielectric,
              hit,
              lambertian,
              metal,
              scatterRay,
              sphere) where
 
+import Control.Applicative ((<|>))
+import Control.Monad (guard)
 import Control.Monad.State (State, state)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import System.Random (Random, RandomGen, random)
 
 import Data.Foldable (minimumBy)
@@ -17,7 +22,7 @@ import Data.Function (on)
 import Data.Maybe (maybeToList)
 
 import Ray (Ray(..), pointAt, rayDirection)
-import Vector (Vec3, dot, squaredLength, unit, vec)
+import Vector (Vec3, dot, reverseVector, squaredLength, unit, vec, vectorLength)
 
 data Hit a = Hit { hitTime :: a
                  , hitLocation :: Vec3 a
@@ -82,7 +87,7 @@ randomInUnitSphere = do
 
 lambertian :: (Fractional a, Ord a, Random a) => Vec3 a -> Material a
 lambertian albedo = Material scatter
-    where scatter _ (Hit { hitLocation, hitNormal }) = do
+    where scatter _ Hit { hitLocation, hitNormal } = do
             r <- randomInUnitSphere
             let target = hitLocation + hitNormal + r
                 scattered = Ray hitLocation (target - hitLocation)
@@ -94,7 +99,7 @@ reflect v n = v - (vec (2 * (dot v n)) * n)
 
 metal :: (Floating a, Ord a, Random a) => Vec3 a -> a -> Material a
 metal albedo fuzz = Material scatter
-    where scatter ray (Hit { hitLocation, hitNormal }) = do
+    where scatter ray Hit { hitLocation, hitNormal } = do
             r <- randomInUnitSphere
             let reflected = reflect (unit (rayDirection ray)) hitNormal
                 reflected' = reflected + (vec fuzz * r)
@@ -103,3 +108,37 @@ metal albedo fuzz = Material scatter
                 shouldReflect = dot (rayDirection scattered) hitNormal > 0
                 result = MaterialInteraction attenuation scattered
             pure (if shouldReflect then Just result else Nothing)
+
+refract :: (Floating a, Ord a) => Vec3 a -> Vec3 a -> a -> Maybe (Vec3 a) -- direction normal refractive-index
+refract v n i = let uv = unit v
+                    dt = dot uv n
+                    discriminant = 1 - (i * i * (1 - (dt * dt)))
+                    result = (vec i * (uv - (n * vec dt))) - (n * vec (sqrt discriminant))
+                in if discriminant > 0 then Just result else Nothing
+
+schlick :: Floating a => a -> a -> a
+schlick cosine idx = let r0 = (1 - idx) / (1 + idx)
+                         r1 = r0 * r0
+                     in r1 + ((1 - r1) * ((1 - cosine) ** 5))
+
+dielectric :: (Floating a, Ord a, Random a) => a -> Material a
+dielectric i = Material scatter
+    where scatter Ray { rayDirection } Hit { hitLocation, hitNormal } =
+              let reflected = reflect rayDirection hitNormal
+                  (outwardNormal, index, cosine) = normalIndex rayDirection hitNormal
+                  attenuation = vec 1
+                  reflectionProb = schlick cosine i
+                  reflection = pure (MaterialInteraction attenuation (Ray hitLocation reflected))
+                  refraction = do
+                    refracted <- MaybeT (pure (refract rayDirection outwardNormal index))
+                    r <- lift (state random)
+                    guard (r >= reflectionProb)
+                    pure (MaterialInteraction attenuation (Ray hitLocation refracted))
+              in runMaybeT (refraction <|> reflection)
+
+          normalIndex direction normal = let dot' = dot direction normal
+                                             a = i * dot' / vectorLength direction
+                                             b = negate (dot' / vectorLength direction)
+                                         in if dot' > 0
+                                         then (reverseVector normal, i, a)
+                                         else (normal, recip i, b)
