@@ -1,4 +1,4 @@
-module Colour (Colour, bpp8, colour, gamma2, scaleColour) where
+module Colour (Colour, bpp8, colour, gamma2, scaleColour, scaleColour') where
 
 data Colour = Colour Double Double Double Int
 
@@ -29,5 +29,11 @@ gamma2 (Colour r g b count) =
         b' = b / scale
     in (int r', int g', int b')
 
-scaleColour :: Double -> Colour -> Colour
-scaleColour x (Colour r g b c) = Colour (r * x) (g * x) (b * x) c
+-- todo: check the numbers stay in range
+scaleColour :: Double -> Double -> Double -> Colour -> Colour
+scaleColour x y z (Colour r g b c) = Colour (r * x) (g * y) (b * z) c
+
+scaleColour' :: Double -> Colour -> Colour
+scaleColour' x = scaleColour x x x
+
+
