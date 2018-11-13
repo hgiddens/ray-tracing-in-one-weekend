@@ -1,11 +1,11 @@
 module Ray (Ray(..),
             pointAt) where
 
-import Vector (Vec3)
+import Vector (Vec3, vec)
 
-data Ray a = Ray { rayOrigin :: Vec3 a
-                 , rayDirection :: Vec3 a
-                 }
+data Ray = Ray { rayOrigin :: Vec3
+               , rayDirection :: Vec3
+               }
 
-pointAt :: Num a => Ray a -> a -> Vec3 a
-pointAt (Ray a b) t = a + (pure t * b)
+pointAt :: Ray -> Float -> Vec3
+pointAt (Ray a b) t = a + (vec t * b)

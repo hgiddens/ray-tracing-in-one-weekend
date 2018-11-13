@@ -7,9 +7,9 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Data.Foldable (foldl1, traverse_)
 import Data.Maybe (fromMaybe)
-import System.Random (Random, RandomGen, newStdGen, random)
+import System.Random (RandomGen, mkStdGen, random)
 
-import Camera (Camera, Rasterer(..), camera, rasterRays)
+import Camera (Rasterer(..), camera, rasterRays)
 import Colour (Colour, colour, gamma2, scaleColour)
 import Ray (Ray(..))
 import Prim (Hit(..), MaterialInteraction(..), Prim, dielectric, hit, lambertian, metal, scatterRay, sphere)
@@ -25,7 +25,7 @@ fromMaybeT :: Functor m => a -> MaybeT m a -> m a
 fromMaybeT a m = fromMaybe a <$> runMaybeT m
 
 -- todo: the vector -> colour conversion is gnarly and requires the real class :(
-rayColour :: (Random a, RandomGen g, RealFloat a) => Prim a -> Ray a -> State g Colour
+rayColour :: RandomGen g => Prim -> Ray -> State g Colour
 rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
     where
       tMin = Just 0.001
@@ -36,12 +36,12 @@ rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
         guard (depth < depthLimit)
         interaction <- MaybeT (scatterRay (hitMaterial hitRecord) ray hitRecord)
         c <- lift (go (depth + 1) (materialScattered interaction))
-        let (Vec3 x y z) = fmap realToFrac (materialAttenuation interaction)
-        pure (scaleColour x y z c)
+        let v = materialAttenuation interaction
+        pure (fromVector scaleColour realToFrac v c)
 
       missColour = pure (convert background)
 
-      convert = fromVector colour . fmap realToFrac
+      convert = fromVector colour realToFrac
       background = let (Vec3 _ y _) = unit initialDirection
                        t' = 0.5 * (y + 1)
                        blue = Vec3 0.5 0.7 1.0
@@ -50,7 +50,7 @@ rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
 
       go depth ray = maybe missColour (hitColour depth ray) (hit world ray tMin tMax)
 
-randomWorld :: (Enum a, Floating a, Ord a, Random a, RandomGen g) => State g (Prim a)
+randomWorld :: RandomGen g => State g Prim
 randomWorld = fmap (base <>) randomSpheres
     where
       base = (sphere (Vec3 0 (-1000) 0) 1000 (lambertian (Vec3 0.5 0.5 0.5))) <>
@@ -75,7 +75,7 @@ randomWorld = fmap (base <>) randomSpheres
       randomMat = let go r | r < 0.8 = diffuse
                            | r < 0.95 = metal'
                            | otherwise = glass
-                  in state (random :: RandomGen g => g -> (Double, g)) >>= go
+                  in state (random :: RandomGen g => g -> (Float, g)) >>= go
 
       randomCentre a b = do x <- state random
                             let x' = a + (0.9 * x)
@@ -99,8 +99,8 @@ main = do
   putStrLn "P3"
   putStrLn $ (show (rastererHorizontalPixels rasterer)) ++ " " ++ (show (rastererVerticalPixels rasterer))
   putStrLn "255"
-  gen <- newStdGen
-  let pixels = do
+  let gen = mkStdGen 113
+      pixels = do
          world <- randomWorld
          rays <- rasterRays rasterer c
          traverse (pixelFromRays world) rays
@@ -109,7 +109,6 @@ main = do
       nx, ny :: Num a => a
       nx = 400
       ny = 200
-      c :: Camera Double
       c = let lookFrom = Vec3 5 2 10
               lookAt = Vec3 0 1 (-1)
               up = Vec3 0 1 0

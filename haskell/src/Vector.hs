@@ -8,30 +8,33 @@ module Vector (Vec3(..),
                vec,
                vectorLength) where
 
-import Control.Applicative (liftA2)
 import Control.Monad.State (runState, state)
 import System.Random (Random, random, randomR)
 
-data Vec3 a = Vec3 a a a deriving (Functor, Foldable)
+data Vec3 = Vec3 Float Float Float
 
-instance Applicative Vec3 where
-    liftA2 f (Vec3 x y z) (Vec3 x' y' z') = Vec3 (f x x') (f y y') (f z z')
-    pure a = Vec3 a a a
+-- todo: monotraversible
 
-instance Num a => Num (Vec3 a) where
-    (+) = liftA2 (+)
-    (-) = liftA2 (-)
-    (*) = liftA2 (*)
-    abs = fmap abs
-    negate = fmap negate
-    signum = fmap signum
-    fromInteger = pure . fromInteger
+liftV2 :: (Float -> Float -> Float) -> Vec3 -> Vec3 -> Vec3
+liftV2 f (Vec3 x y z) (Vec3 x' y' z') = Vec3 (f x x') (f y y') (f z z')
 
-instance Fractional a => Fractional (Vec3 a) where
-    (/) = liftA2 (/)
-    fromRational = pure . fromRational
+vmap :: (Float -> Float) -> Vec3 -> Vec3
+vmap f (Vec3 x y z) = Vec3 (f x) (f y) (f z)
 
-instance Random a => Random (Vec3 a) where
+instance Num Vec3 where
+    (+) = liftV2 (+)
+    (-) = liftV2 (-)
+    (*) = liftV2 (*)
+    abs = vmap abs
+    negate = vmap negate
+    signum = vmap signum
+    fromInteger = vec . fromInteger
+
+instance Fractional Vec3 where
+    (/) = liftV2 (/)
+    fromRational = vec . fromRational
+
+instance Random Vec3 where
     randomR (Vec3 loX loY loZ, Vec3 hiX hiY hiZ) =
         let x = state (randomR (loX, hiX))
             y = state (randomR (loY, hiY))
@@ -39,31 +42,31 @@ instance Random a => Random (Vec3 a) where
         in runState (Vec3 <$> x <*> y <*> z)
     random = runState (Vec3 <$> state random <*> state random <*> state random)
 
-cross :: Num a => Vec3 a -> Vec3 a -> Vec3 a
+cross :: Vec3 -> Vec3 -> Vec3
 cross (Vec3 x y z) (Vec3 x' y' z') =
     let x'' = (y * z') - (z * y')
         y'' = negate $ (x * z') - (z * x')
         z'' = (x * y') - (y * x')
     in Vec3 x'' y'' z''
 
-dot :: Num a => Vec3 a -> Vec3 a -> a
-dot a b = sum (a * b)
+dot :: Vec3 -> Vec3 -> Float
+dot (Vec3 x y z) (Vec3 x' y' z') = (x * x') + (y * y') + (z * z')
 
-fromVector :: (a -> a -> a -> b) -> Vec3 a -> b
-fromVector f (Vec3 x y z) = f x y z
+fromVector :: (a -> a -> a -> b) -> (Float -> a) -> Vec3 -> b
+fromVector f g (Vec3 x y z) = f (g x) (g y) (g z)
 
-reverseVector :: Num a => Vec3 a -> Vec3 a
-reverseVector = fmap negate
+reverseVector :: Vec3 -> Vec3
+reverseVector = vmap negate
 
-squaredLength :: Num a => Vec3 a -> a
+squaredLength :: Vec3 -> Float
 squaredLength v = dot v v
 
-unit :: Floating a => Vec3 a -> Vec3 a
-unit v = let l = vectorLength v in fmap (/l) v
+unit :: Vec3 -> Vec3
+unit v = let l = vectorLength v in vmap (/l) v
 
-vec :: a -> Vec3 a
-vec = pure
+vec :: Float -> Vec3
+vec a = Vec3 a a a
 
-vectorLength :: Floating a => Vec3 a -> a
+vectorLength :: Vec3 -> Float
 vectorLength = sqrt . squaredLength
 
