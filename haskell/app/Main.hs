@@ -13,7 +13,7 @@ import Camera (Camera, Rasterer(..), camera, rasterRays)
 import Colour (Colour, colour, gamma2, scaleColour)
 import Ray (Ray(..))
 import Prim (Hit(..), MaterialInteraction(..), Prim, dielectric, hit, lambertian, metal, scatterRay, sphere)
-import Vector (Vec3(..), fromVector, unit, vec)
+import Vector (Vec3(..), fromVector, unit, vec, vectorLength)
 
 -- newtype for the show instance
 newtype PixelColour = PixelColour Colour
@@ -65,7 +65,14 @@ main = do
       nx = 400
       ny = 200
       c :: Camera Double
-      c = camera (Vec3 (-2) 2 1) (Vec3 0 0 (-1)) (Vec3 0 1 0) 20 (nx / ny)
+      c = let lookFrom = Vec3 3 3 2
+              lookAt = Vec3 0 0 (-1)
+              up = Vec3 0 1 0
+              vfov = 20
+              aspect = nx / ny
+              aperture = 2
+              focusDistance = vectorLength (lookFrom - lookAt)
+          in camera lookFrom lookAt up vfov aspect aperture focusDistance
       rasterer = Rasterer nx ny
 
       leftSphere = (sphere (Vec3 (-1) 0 (-1)) 0.5 (dielectric 1.5)) <>
