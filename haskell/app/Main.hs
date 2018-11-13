@@ -9,7 +9,7 @@ import Data.Foldable (foldl1, traverse_)
 import Data.Maybe (fromMaybe)
 import System.Random (Random, RandomGen, newStdGen)
 
-import Camera (Camera, Rasterer(..), defaultCamera, rasterRays)
+import Camera (Camera, Rasterer(..), camera, rasterRays)
 import Colour (Colour, colour, gamma2, scaleColour)
 import Ray (Ray(..))
 import Prim (Hit(..), MaterialInteraction(..), Prim, dielectric, hit, lambertian, metal, scatterRay, sphere)
@@ -57,20 +57,24 @@ main = do
   putStrLn "255"
   gen <- newStdGen
   let pixels = do
-         rays <- rasterRays rasterer camera
+         rays <- rasterRays rasterer c
          traverse pixelFromRays rays
   traverse_ print (evalState pixels gen)
     where
-      camera = defaultCamera :: Camera Double
-      rasterer = Rasterer 400 200
+      nx, ny :: Num a => a
+      nx = 400
+      ny = 200
+      c :: Camera Double
+      c = camera (Vec3 (-2) 2 1) (Vec3 0 0 (-1)) (Vec3 0 1 0) 20 (nx / ny)
+      rasterer = Rasterer nx ny
 
       leftSphere = (sphere (Vec3 (-1) 0 (-1)) 0.5 (dielectric 1.5)) <>
                    (sphere (Vec3 (-1) 0 (-1)) (-0.45) (dielectric 1.5))
       rightSphere = sphere (Vec3 1 0 (-1)) 0.5 (metal (Vec3 0.8 0.6 0.2) 0.1)
       middleSphere = sphere (Vec3 0 0 (-1)) 0.5 (lambertian (Vec3 0.1 0.2 0.5))
       bottomSphere = sphere (Vec3 0 (-100.5) (-1)) 100 (lambertian (Vec3 0.8 0.8 0))
-
       world = leftSphere <> middleSphere <> rightSphere <> bottomSphere
+
       mergeColours = foldl1 (<>)
 
       pixelFromRays rays = fmap (PixelColour . mergeColours) (traverse (rayColour world) rays)
