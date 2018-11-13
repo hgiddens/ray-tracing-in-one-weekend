@@ -2,12 +2,12 @@ module Main where
 
 import Control.Monad (guard)
 -- todo: i think this being lazy is why we need #all the memory
-import Control.Monad.State (State, evalState)
+import Control.Monad.State (State, evalState, state)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Data.Foldable (foldl1, traverse_)
 import Data.Maybe (fromMaybe)
-import System.Random (Random, RandomGen, newStdGen)
+import System.Random (Random, RandomGen, newStdGen, random)
 
 import Camera (Camera, Rasterer(..), camera, rasterRays)
 import Colour (Colour, colour, gamma2, scaleColour)
@@ -50,6 +50,50 @@ rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
 
       go depth ray = maybe missColour (hitColour depth ray) (hit world ray tMin tMax)
 
+randomWorld :: (Enum a, Floating a, Ord a, Random a, RandomGen g) => State g (Prim a)
+randomWorld = fmap (base <>) randomSpheres
+    where
+      base = (sphere (Vec3 0 (-1000) 0) 1000 (lambertian (Vec3 0.5 0.5 0.5))) <>
+             (sphere (Vec3 0 1 0) 1 (dielectric 1.5)) <>
+             (sphere (Vec3 (-4) 1 0) 1 (lambertian (Vec3 0.4 0.2 0.1))) <>
+             (sphere (Vec3 4 1 0) 1 (metal (Vec3 0.7 0.4 0.5) 0))
+
+      diffuse = fmap lambertian ((*) <$> state random <*> state random)
+
+      metal' = do x <- state random
+                  let x' = 0.5 * (1 + x)
+                  y <- state random
+                  let y' = 0.5 * (1 + y)
+                  z <- state random
+                  let z' = 0.5 * (1 + z)
+                  fuzz <- state random
+                  let fuzz' = 0.5 * fuzz
+                  pure (metal (Vec3 x' y' z') fuzz')
+
+      glass = pure (dielectric 1.5)
+
+      randomMat = let go r | r < 0.8 = diffuse
+                           | r < 0.95 = metal'
+                           | otherwise = glass
+                  in state (random :: RandomGen g => g -> (Double, g)) >>= go
+
+      randomCentre a b = do x <- state random
+                            let x' = a + (0.9 * x)
+                            z <- state random
+                            let z' = b + (0.9 * z)
+                            pure (Vec3 x' 0.2 z')
+
+      valid centre = vectorLength (centre - Vec3 4 0.2 0) > 0.9
+
+      mkSphere centre = sphere centre 0.2 <$> randomMat
+
+      randomSpheres =
+          do centres <- sequence [randomCentre a b | a <- [-11 .. 10], b <- [-11 .. 10]]
+             let validCentres = filter valid centres
+             prims <- traverse mkSphere validCentres
+             pure (mconcat prims)
+
+
 main :: IO ()
 main = do
   putStrLn "P3"
@@ -57,31 +101,25 @@ main = do
   putStrLn "255"
   gen <- newStdGen
   let pixels = do
+         world <- randomWorld
          rays <- rasterRays rasterer c
-         traverse pixelFromRays rays
+         traverse (pixelFromRays world) rays
   traverse_ print (evalState pixels gen)
     where
       nx, ny :: Num a => a
       nx = 400
       ny = 200
       c :: Camera Double
-      c = let lookFrom = Vec3 3 3 2
-              lookAt = Vec3 0 0 (-1)
+      c = let lookFrom = Vec3 5 2 10
+              lookAt = Vec3 0 1 (-1)
               up = Vec3 0 1 0
               vfov = 20
               aspect = nx / ny
-              aperture = 2
+              aperture = 1
               focusDistance = vectorLength (lookFrom - lookAt)
           in camera lookFrom lookAt up vfov aspect aperture focusDistance
       rasterer = Rasterer nx ny
 
-      leftSphere = (sphere (Vec3 (-1) 0 (-1)) 0.5 (dielectric 1.5)) <>
-                   (sphere (Vec3 (-1) 0 (-1)) (-0.45) (dielectric 1.5))
-      rightSphere = sphere (Vec3 1 0 (-1)) 0.5 (metal (Vec3 0.8 0.6 0.2) 0.1)
-      middleSphere = sphere (Vec3 0 0 (-1)) 0.5 (lambertian (Vec3 0.1 0.2 0.5))
-      bottomSphere = sphere (Vec3 0 (-100.5) (-1)) 100 (lambertian (Vec3 0.8 0.8 0))
-      world = leftSphere <> middleSphere <> rightSphere <> bottomSphere
-
       mergeColours = foldl1 (<>)
 
-      pixelFromRays rays = fmap (PixelColour . mergeColours) (traverse (rayColour world) rays)
+      pixelFromRays world rays = fmap (PixelColour . mergeColours) (traverse (rayColour world) rays)

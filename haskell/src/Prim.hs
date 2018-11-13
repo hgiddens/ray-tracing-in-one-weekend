@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Prim (Hit(..),
+             Material,
              MaterialInteraction(..),
              Prim,
              dielectric,
