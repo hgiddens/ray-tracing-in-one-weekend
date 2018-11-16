@@ -102,11 +102,12 @@ main = do
   let gen = mkStdGen 113
       pixels = do
          world <- randomWorld
-         rays <- rasterRays rasterer c
+         rays <- rasterRays rasterer c ns
          traverse (pixelFromRays world) rays
   traverse_ print (evalState pixels gen)
     where
-      nx, ny :: Num a => a
+      ns, nx, ny :: Num a => a
+      ns = 10 -- samples
       nx = 400
       ny = 200
       c = let lookFrom = Vec3 5 2 10

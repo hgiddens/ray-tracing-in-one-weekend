@@ -18,11 +18,7 @@ data Camera = Camera { cameraLowerLeftCorner :: Vec3
                      , cameraV :: Vec3
                      , cameraW :: Vec3
                      , cameraLensRadius :: Float
-                     , cameraSamples :: Int -- todo: this has no business here
                      }
-
-defaultSamples = 100
-defaultSamples :: Int
 
 camera :: Vec3 -> Vec3 -> Vec3 -> Float -> Float -> Float -> Float -> Camera
 camera lookfrom lookat up vfov aspect aperture focusDist =
@@ -40,7 +36,6 @@ camera lookfrom lookat up vfov aspect aperture focusDist =
         cameraV = v
         cameraW = w
         cameraLensRadius = aperture / 2
-        cameraSamples = defaultSamples
     in Camera {..}
 
 -- the fractional class is mostly for the [0, 1) bound
@@ -67,8 +62,8 @@ data Rasterer = Rasterer { rastererHorizontalPixels :: Int
 
 -- todo: non-empty list
 -- todo: return 2d array or whatever not a list
-rasterRays :: RandomGen g => Rasterer -> Camera -> State g [[Ray]]
-rasterRays rasterer c = sequence [rays i j | j <- [(ny - 1), (ny - 2) .. 0], i <- [0 .. (nx - 1)]]
+rasterRays :: RandomGen g => Rasterer -> Camera -> Int -> State g [[Ray]]
+rasterRays rasterer c ns = sequence [rays i j | j <- [(ny - 1), (ny - 2) .. 0], i <- [0 .. (nx - 1)]]
     where 
       nx = rastererHorizontalPixels rasterer
       nx' = fromIntegral nx
@@ -79,7 +74,7 @@ rasterRays rasterer c = sequence [rays i j | j <- [(ny - 1), (ny - 2) .. 0], i <
       rays i j = let randomRay = do i' <- adjust i nx'
                                     j' <- adjust j ny'
                                     cameraRay c i' j'
-                 in replicateM (cameraSamples c) randomRay
+                 in replicateM ns randomRay
 
       -- converts the a'th pixel (of b) into the viewport dimension (with rays randomly scattered within the pixel)
       adjust a b = let scale x = (fromIntegral a + x) / b
