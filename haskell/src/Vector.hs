@@ -1,7 +1,6 @@
 module Vector (Vec3(..),
                cross,
                dot,
-               fromVector,
                reverseVector,
                squaredLength,
                unit,
@@ -51,9 +50,6 @@ cross (Vec3 x y z) (Vec3 x' y' z') =
 
 dot :: Vec3 -> Vec3 -> Float
 dot (Vec3 x y z) (Vec3 x' y' z') = (x * x') + (y * y') + (z * z')
-
-fromVector :: (a -> a -> a -> b) -> (Float -> a) -> Vec3 -> b
-fromVector f g (Vec3 x y z) = f (g x) (g y) (g z)
 
 reverseVector :: Vec3 -> Vec3
 reverseVector = vmap negate

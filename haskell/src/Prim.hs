@@ -22,6 +22,7 @@ import Data.Foldable (minimumBy)
 import Data.Function (on)
 import Data.Maybe (maybeToList)
 
+import Colour (Colour, colour)
 import Ray (Ray(..), pointAt, rayDirection)
 import Vector (Vec3, dot, reverseVector, squaredLength, unit, vec, vectorLength)
 
@@ -64,7 +65,7 @@ hitSphere centre radius material ray@(Ray origin direction) tMin tMax
                               checkMax = maybe True (root <) tMax
                           in checkMin && checkMax
 
-data MaterialInteraction = MaterialInteraction { materialAttenuation :: Vec3
+data MaterialInteraction = MaterialInteraction { materialAttenuation :: Colour
                                                , materialScattered :: Ray
                                                }
 
@@ -86,7 +87,7 @@ randomInUnitSphere = do
 
 -- todo: i think the albedos should be colours
 
-lambertian :: Vec3 -> Material
+lambertian :: Colour -> Material
 lambertian albedo = Material scatter
     where scatter _ Hit { hitLocation, hitNormal } = do
             r <- randomInUnitSphere
@@ -98,7 +99,7 @@ lambertian albedo = Material scatter
 reflect :: Vec3 -> Vec3 -> Vec3
 reflect v n = v - (vec (2 * (dot v n)) * n)
 
-metal :: Vec3 -> Float -> Material
+metal :: Colour -> Float -> Material
 metal albedo fuzz = Material scatter
     where scatter ray Hit { hitLocation, hitNormal } = do
             r <- randomInUnitSphere
@@ -127,7 +128,7 @@ dielectric i = Material scatter
     where scatter Ray { rayDirection } Hit { hitLocation, hitNormal } =
               let reflected = reflect rayDirection hitNormal
                   (outwardNormal, index, cosine) = normalIndex rayDirection hitNormal
-                  attenuation = vec 1
+                  attenuation = colour 1 1 1
                   reflectionProb = schlick cosine i
                   reflection = pure (MaterialInteraction attenuation (Ray hitLocation reflected))
                   refraction = do
