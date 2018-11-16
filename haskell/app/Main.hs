@@ -11,7 +11,7 @@ import System.Random (RandomGen, mkStdGen, random)
 
 import Camera (Viewport(..), camera, viewportRays)
 import Colour (Colour, colour, gamma2, scaleColour, tween)
-import Ray (Ray(..))
+import Ray (Ray(..), rayDirection)
 import Prim (Hit(..), MaterialInteraction(..), Prim, dielectric, hit, lambertian, metal, scatterRay, sphere)
 import Vector (Vec3(..), unit, vectorLength)
 
@@ -25,7 +25,7 @@ fromMaybeT :: Functor m => a -> MaybeT m a -> m a
 fromMaybeT a m = fromMaybe a <$> runMaybeT m
 
 rayColour :: RandomGen g => Prim -> Ray -> State g Colour
-rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
+rayColour world initialRay = go (0 :: Int) initialRay
     where
       tMin = Just 0.001
       tMax = Nothing
@@ -38,15 +38,15 @@ rayColour world initialRay@(Ray _ initialDirection) = go (0 :: Int) initialRay
         let v = materialAttenuation interaction
         pure $ scaleColour v c
 
-      missColour = pure background
+      missColour ray = pure (background ray)
 
-      background = let (Vec3 _ y _) = unit initialDirection
-                       t = 0.5 * (y + 1)
-                       blue = colour 0.5 0.7 1
-                       white = colour 1 1 1
-                   in tween t white blue
+      background ray = let (Vec3 _ y _) = unit (rayDirection ray)
+                           t = 0.5 * (y + 1)
+                           blue = colour 0.5 0.7 1
+                           white = colour 1 1 1
+                       in tween t white blue
 
-      go depth ray = maybe missColour (hitColour depth ray) (hit world ray tMin tMax)
+      go depth ray = maybe (missColour ray) (hitColour depth ray) (hit world ray tMin tMax)
 
 randomWorld :: RandomGen g => State g Prim
 randomWorld = fmap (base <>) randomSpheres

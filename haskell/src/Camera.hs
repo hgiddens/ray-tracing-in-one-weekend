@@ -48,7 +48,8 @@ cameraRay :: RandomGen g => Camera -> Float -> Float -> State g Ray
 cameraRay Camera{..} s t = fmap (withOrigin . toOrigin) randomInUnitDisk
     where withOrigin origin = let direction = cameraLowerLeftCorner + (vec s * cameraHorizontal) + (vec t * cameraVertical) - origin
                               in Ray origin direction
-          toOrigin (Vec3 x y _) = cameraOrigin + ((vec x * cameraU) + (vec y * cameraV))
+          toOrigin r = let Vec3 x y _ = vec cameraLensRadius * r
+                       in cameraOrigin + ((vec x * cameraU) + (vec y * cameraV))
 
 data Viewport = Viewport { viewportHorizontalPixels :: Int
                          , viewportVerticalPixels :: Int
