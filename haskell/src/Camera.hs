@@ -1,7 +1,7 @@
 module Camera (Camera,
-               Rasterer(..),
+               Viewport(..),
                camera,
-               rasterRays) where
+               viewportRays) where
 
 import Control.Monad (replicateM)
 import Control.Monad.State (State, state)
@@ -16,10 +16,10 @@ data Camera = Camera { cameraLowerLeftCorner :: Vec3
                      , cameraOrigin :: Vec3
                      , cameraU :: Vec3
                      , cameraV :: Vec3
-                     , cameraW :: Vec3
                      , cameraLensRadius :: Float
                      }
 
+-- todo: it would be nice to find a way of writing these that isn't so memory heavy
 camera :: Vec3 -> Vec3 -> Vec3 -> Float -> Float -> Float -> Float -> Camera
 camera lookfrom lookat up vfov aspect aperture focusDist =
     let theta = vfov * pi / 180
@@ -34,12 +34,9 @@ camera lookfrom lookat up vfov aspect aperture focusDist =
         cameraVertical = vec (2 * halfHeight * focusDist) * v
         cameraU = u
         cameraV = v
-        cameraW = w
         cameraLensRadius = aperture / 2
     in Camera {..}
 
--- the fractional class is mostly for the [0, 1) bound
--- todo: it would be nice to find a way of writing these that isn't so memory heavy
 randomInUnitDisk :: RandomGen g => State g Vec3
 randomInUnitDisk = do
   p <- fromXY <$> state random <*> state random
@@ -48,29 +45,25 @@ randomInUnitDisk = do
             ok p = dot p p < 1
 
 cameraRay :: RandomGen g => Camera -> Float -> Float -> State g Ray
-cameraRay Camera{..} s t = fmap withOffset randomInUnitDisk
-    where withOffset r = let Vec3 x y _ = vec cameraLensRadius * r
-                             offset = (vec x * cameraU) + (vec y * cameraV)
-                             origin = cameraOrigin + offset
-                             direction = cameraLowerLeftCorner + (vec s * cameraHorizontal) + (vec t * cameraVertical) - cameraOrigin - offset
-                         in Ray origin direction
+cameraRay Camera{..} s t = fmap (withOrigin . toOrigin) randomInUnitDisk
+    where withOrigin origin = let direction = cameraLowerLeftCorner + (vec s * cameraHorizontal) + (vec t * cameraVertical) - origin
+                              in Ray origin direction
+          toOrigin (Vec3 x y _) = cameraOrigin + ((vec x * cameraU) + (vec y * cameraV))
 
--- todo: terrible name; viewport?
-data Rasterer = Rasterer { rastererHorizontalPixels :: Int
-                         , rastererVerticalPixels :: Int
+data Viewport = Viewport { viewportHorizontalPixels :: Int
+                         , viewportVerticalPixels :: Int
                          }
 
--- todo: non-empty list
--- todo: return 2d array or whatever not a list
-rasterRays :: RandomGen g => Rasterer -> Camera -> Int -> State g [[Ray]]
-rasterRays rasterer c ns = sequence [rays i j | j <- [(ny - 1), (ny - 2) .. 0], i <- [0 .. (nx - 1)]]
+-- todo: return 2d array or whatever not a list, or a non-empty list maybe?
+viewportRays :: RandomGen g => Viewport -> Camera -> Int -> State g [[Ray]]
+viewportRays viewport c ns = sequence [rays i j | j <- [(ny - 1), (ny - 2) .. 0], i <- [0 .. (nx - 1)]]
     where 
-      nx = rastererHorizontalPixels rasterer
+      nx = viewportHorizontalPixels viewport
       nx' = fromIntegral nx
-      ny = rastererVerticalPixels rasterer
+      ny = viewportVerticalPixels viewport
       ny' = fromIntegral ny
 
-      -- the randomly sampling of rays for the (i, j) pixel
+      -- the random sampling of rays for the (i, j) pixel
       rays i j = let randomRay = do i' <- adjust i nx'
                                     j' <- adjust j ny'
                                     cameraRay c i' j'

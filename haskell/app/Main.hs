@@ -9,7 +9,7 @@ import Data.Foldable (foldl1, traverse_)
 import Data.Maybe (fromMaybe)
 import System.Random (RandomGen, mkStdGen, random)
 
-import Camera (Rasterer(..), camera, rasterRays)
+import Camera (Viewport(..), camera, viewportRays)
 import Colour (Colour, colour, gamma2, scaleColour, tween)
 import Ray (Ray(..))
 import Prim (Hit(..), MaterialInteraction(..), Prim, dielectric, hit, lambertian, metal, scatterRay, sphere)
@@ -92,12 +92,12 @@ randomWorld = fmap (base <>) randomSpheres
 main :: IO ()
 main = do
   putStrLn "P3"
-  putStrLn $ (show (rastererHorizontalPixels rasterer)) ++ " " ++ (show (rastererVerticalPixels rasterer))
+  putStrLn $ (show (viewportHorizontalPixels viewport)) ++ " " ++ (show (viewportVerticalPixels viewport))
   putStrLn "255"
   let gen = mkStdGen 113
       pixels = do
          world <- randomWorld
-         rays <- rasterRays rasterer c ns
+         rays <- viewportRays viewport c ns
          traverse (pixelFromRays world) rays
   traverse_ print (evalState pixels gen)
     where
@@ -113,7 +113,7 @@ main = do
               aperture = 1
               focusDistance = vectorLength (lookFrom - lookAt)
           in camera lookFrom lookAt up vfov aspect aperture focusDistance
-      rasterer = Rasterer nx ny
+      viewport = Viewport nx ny
 
       mergeColours = foldl1 (<>)
 
