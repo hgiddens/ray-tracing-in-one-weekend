@@ -4,7 +4,7 @@ module Camera (Camera,
                viewportRays) where
 
 import Control.Monad (replicateM)
-import Control.Monad.State (State, state)
+import Control.Monad.State.Strict (State, state)
 import System.Random (RandomGen, random)
 
 import Ray (Ray(..))

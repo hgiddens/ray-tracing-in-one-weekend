@@ -13,7 +13,7 @@ module Prim (Hit(..),
 
 import Control.Applicative ((<|>))
 import Control.Monad (guard)
-import Control.Monad.State (State, state)
+import Control.Monad.State.Strict (State, state)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import System.Random (RandomGen, random)

@@ -1,6 +1,6 @@
 module Colour (Colour, bpp8, colour, gamma2, scaleColour, tween) where
 
-import Control.Monad.State (runState, state)
+import Control.Monad.State.Strict (runState, state)
 import System.Random (Random, random, randomR)
 
 data Colour = Colour Float Float Float Int

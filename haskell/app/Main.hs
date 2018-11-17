@@ -1,8 +1,7 @@
 module Main where
 
 import Control.Monad (guard)
--- todo: i think this being lazy is why we need #all the memory
-import Control.Monad.State (State, evalState, state)
+import Control.Monad.State.Strict (State, evalState, state)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Data.Foldable (foldl1, traverse_)

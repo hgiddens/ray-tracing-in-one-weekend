@@ -9,7 +9,7 @@ module Vector (Vec3(..),
                vec,
                vectorLength) where
 
-import Control.Monad.State (runState, state)
+import Control.Monad.State.Strict (runState, state)
 import Data.MonoTraversable (Element, MonoFoldable, MonoFunctor, ofoldMap, ofoldl', ofoldl1Ex', ofoldr, ofoldr1Ex, omap, osum)
 import System.Random (Random, random, randomR)
 
