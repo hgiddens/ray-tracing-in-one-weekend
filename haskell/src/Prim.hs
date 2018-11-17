@@ -16,11 +16,8 @@ import Control.Monad (guard)
 import Control.Monad.State.Strict (State, state)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
+import Data.List (foldl')
 import System.Random (RandomGen, random)
-
-import Data.Foldable (minimumBy)
-import Data.Function (on)
-import Data.Maybe (maybeToList)
 
 import Colour (Colour, colour)
 import Ray (Ray(..), pointAt, rayDirection)
@@ -36,12 +33,9 @@ type HitFn = Ray -> Maybe Float -> Maybe Float -> Maybe Hit
 newtype Prim = Prim [HitFn] deriving (Semigroup, Monoid)
 
 hit :: Prim -> Ray -> Maybe Float -> Maybe Float -> Maybe Hit
-hit (Prim prims) ray tMin tMax = 
-    let testHit prim = prim ray tMin tMax
-        possibleHits = fmap testHit prims -- todo: consider parallel evaluation
-        hits = possibleHits >>= maybeToList
-    in case hits of [] -> Nothing
-                    _ -> Just (minimumBy (compare `on` hitTime) hits)
+hit (Prim prims) ray tMin tMax = foldl' go Nothing prims
+    where go Nothing prim = prim ray tMin tMax
+          go h@(Just h') prim = prim ray tMin (Just (hitTime h')) <|> h
 
 sphere :: Vec3 -> Float -> Material -> Prim
 sphere centre radius material = Prim [hitSphere centre radius material]
