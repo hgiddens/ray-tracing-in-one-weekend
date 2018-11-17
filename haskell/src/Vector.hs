@@ -13,7 +13,7 @@ import Control.Monad.State (runState, state)
 import Data.MonoTraversable (Element, MonoFoldable, MonoFunctor, ofoldMap, ofoldl', ofoldl1Ex', ofoldr, ofoldr1Ex, omap, osum)
 import System.Random (Random, random, randomR)
 
-data Vec3 = Vec3 Float Float Float
+data Vec3 = Vec3 !Float !Float !Float
 
 type instance Element Vec3 = Float
 
