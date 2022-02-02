@@ -6,6 +6,10 @@ pub struct Colour {
 }
 
 impl Colour {
+    pub fn new(r: f32, g: f32, b: f32) -> Self {
+        Colour { r, g, b }
+    }
+
     // TODO: Way of constraining f to be [0, 1]?
     pub fn blend(from: Colour, to: Colour, t: f32) -> Self {
         let u = 1.0 - t;
@@ -29,14 +33,6 @@ impl Colour {
             r: 0.5294118,
             g: 0.80784315,
             b: 0.98039216,
-        }
-    }
-
-    pub fn red() -> Self {
-        Colour {
-            r: 1.0,
-            g: 0.0,
-            b: 0.0,
         }
     }
 

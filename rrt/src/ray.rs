@@ -25,4 +25,8 @@ impl Ray {
     pub fn direction(self) -> Vec3 {
         self.direction
     }
+
+    pub fn point_at_parameter(self, t: f32) -> Pt3 {
+        self.origin + t * self.direction
+    }
 }
