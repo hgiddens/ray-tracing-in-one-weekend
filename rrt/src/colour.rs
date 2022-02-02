@@ -32,6 +32,14 @@ impl Colour {
         }
     }
 
+    pub fn red() -> Self {
+        Colour {
+            r: 1.0,
+            g: 0.0,
+            b: 0.0,
+        }
+    }
+
     pub fn rgb8(self) -> (u8, u8, u8) {
         (
             (self.r * 255.9f32) as u8,
