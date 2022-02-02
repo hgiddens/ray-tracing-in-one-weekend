@@ -3,3 +3,4 @@
 *.o
 raytracer
 out.ppm
+rrt/target
