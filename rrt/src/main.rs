@@ -16,18 +16,33 @@ use crate::vec3::Vec3;
 
 use rand::Rng;
 
-fn ray_colour<T: Hitable>(scene: &T, ray: Ray) -> Colour {
-    if let Some(record) = scene.hit(&ray, 0.0, f32::MAX) {
-        return Colour::new(
-            0.5 * (record.normal.x + 1.0),
-            0.5 * (record.normal.y + 1.0),
-            0.5 * (record.normal.z + 1.0),
-        );
+// TODO: what's the difference between this and &mut impl rand::Rng or whatever?
+fn random_in_unit_sphere<T: rand::Rng>(rng: &mut T) -> Vec3 {
+    loop {
+        let p = Vec3 {
+            x: (2.0 * rng.gen::<f32>()) - 1.0,
+            y: (2.0 * rng.gen::<f32>()) - 1.0,
+            z: (2.0 * rng.gen::<f32>()) - 1.0,
+        };
+        let squared_length = p.x * p.x + p.y * p.y + p.z * p.z;
+        if squared_length < 1.0 {
+            return p;
+        }
     }
+}
 
-    let unit_direction = ray.direction().unit_vector();
-    let t = (unit_direction.y + 1.0) * 0.5;
-    Colour::blend(Colour::white(), Colour::light_sky_blue(), t)
+const SHADOW_ACNE_MIN: f32 = 0.001;
+
+fn ray_colour<T: Hitable, U: rand::Rng>(scene: &T, rng: &mut U, ray: Ray) -> Colour {
+    if let Some(record) = scene.hit(&ray, SHADOW_ACNE_MIN, f32::MAX) {
+        let target = record.p + record.normal + random_in_unit_sphere(rng);
+        let next_ray = Ray::new(record.p, target - record.p);
+        Colour::blend(Colour::black(), ray_colour(scene, rng, next_ray), 0.5)
+    } else {
+        let unit_direction = ray.direction().unit_vector();
+        let t = (unit_direction.y + 1.0) * 0.5;
+        Colour::blend(Colour::white(), Colour::light_sky_blue(), t)
+    }
 }
 
 fn main() {
@@ -71,23 +86,23 @@ fn main() {
         z: 0.0,
     };
     let camera = SimpleCamera::new(origin, lower_left_corner, horizontal, vertical);
-    let mut rand_rng = rand::thread_rng();
+    let mut rng = rand::thread_rng();
 
     for row in (0..rows).rev() {
         for col in 0..cols {
             let mut colour = Colour::new(0.0, 0.0, 0.0);
             // TODO: Extract supersampler abstraction.
             for _ in 0..samples {
-                let du: f32 = rand_rng.gen();
-                let dv: f32 = rand_rng.gen();
+                let du: f32 = rng.gen();
+                let dv: f32 = rng.gen();
                 let u = (col as f32 + du) / cols as f32;
                 let v = (row as f32 + dv) / rows as f32;
                 let ray = camera.get_ray(u, v);
-                colour = colour + ray_colour(&scene, ray);
+                colour = colour + ray_colour(&scene, &mut rng, ray);
             }
             // TODO: Colour blending function rather than math on colours.
             colour = colour / samples;
-            let (ir, ig, ib) = colour.rgb8();
+            let (ir, ig, ib) = colour.gamma2().rgb8();
             println!("{} {} {}", ir, ig, ib);
         }
     }

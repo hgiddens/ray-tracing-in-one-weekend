@@ -20,6 +20,14 @@ impl Colour {
         }
     }
 
+    pub fn black() -> Self {
+        Colour {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+        }
+    }
+
     pub fn white() -> Self {
         Colour {
             r: 1.0,
@@ -33,6 +41,14 @@ impl Colour {
             r: 0.5294118,
             g: 0.80784315,
             b: 0.98039216,
+        }
+    }
+
+    pub fn gamma2(self) -> Self {
+        Colour {
+            r: self.r.sqrt(),
+            g: self.g.sqrt(),
+            b: self.b.sqrt(),
         }
     }
 

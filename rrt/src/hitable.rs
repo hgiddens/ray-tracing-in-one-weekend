@@ -8,6 +8,8 @@ pub struct HitRecord {
     pub normal: Vec3,
 }
 
+// TODO: This name is dumb it should be SceneLike or something
+// Surely there's a naming convention, what is it?
 pub trait Hitable {
     fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
