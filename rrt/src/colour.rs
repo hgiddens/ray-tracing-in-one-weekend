@@ -44,3 +44,29 @@ impl Colour {
         )
     }
 }
+
+// TODO: This is gross and I hate it
+impl std::ops::Add for Colour {
+    type Output = Self;
+
+    fn add(self, other: Colour) -> Self::Output {
+        Colour {
+            r: self.r + other.r,
+            g: self.g + other.g,
+            b: self.b + other.b,
+        }
+    }
+}
+
+// TODO: This is also gross
+impl std::ops::Div<i32> for Colour {
+    type Output = Self;
+
+    fn div(self, other: i32) -> Self::Output {
+        Colour {
+            r: self.r / other as f32,
+            g: self.g / other as f32,
+            b: self.b / other as f32,
+        }
+    }
+}
