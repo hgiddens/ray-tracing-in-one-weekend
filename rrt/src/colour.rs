@@ -1,4 +1,11 @@
 #[derive(Clone, Copy, Debug)]
+pub struct Albedo {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Colour {
     r: f32,
     g: f32,
@@ -83,6 +90,18 @@ impl std::ops::Div<i32> for Colour {
             r: self.r / other as f32,
             g: self.g / other as f32,
             b: self.b / other as f32,
+        }
+    }
+}
+
+impl std::ops::Mul<Albedo> for Colour {
+    type Output = Self;
+
+    fn mul(self, other: Albedo) -> Self::Output {
+        Colour {
+            r: self.r * other.r,
+            g: self.g * other.g,
+            b: self.b * other.b,
         }
     }
 }

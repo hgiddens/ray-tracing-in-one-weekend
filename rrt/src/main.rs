@@ -1,14 +1,16 @@
 mod camera;
 mod colour;
 mod hitable;
+mod material;
 mod pt3;
 mod ray;
 mod sphere;
 mod vec3;
 
 use crate::camera::{Camera, SimpleCamera};
-use crate::colour::Colour;
+use crate::colour::{Albedo, Colour};
 use crate::hitable::Hitable;
+use crate::material::{Lambertian, Metal};
 use crate::pt3::Pt3;
 use crate::ray::Ray;
 use crate::sphere::Sphere;
@@ -16,28 +18,17 @@ use crate::vec3::Vec3;
 
 use rand::Rng;
 
-// TODO: what's the difference between this and &mut impl rand::Rng or whatever?
-fn random_in_unit_sphere<T: rand::Rng>(rng: &mut T) -> Vec3 {
-    loop {
-        let p = Vec3 {
-            x: (2.0 * rng.gen::<f32>()) - 1.0,
-            y: (2.0 * rng.gen::<f32>()) - 1.0,
-            z: (2.0 * rng.gen::<f32>()) - 1.0,
-        };
-        let squared_length = p.x * p.x + p.y * p.y + p.z * p.z;
-        if squared_length < 1.0 {
-            return p;
-        }
-    }
-}
-
 const SHADOW_ACNE_MIN: f32 = 0.001;
+const DEPTH_MAX: i32 = 50;
 
-fn ray_colour<T: Hitable, U: rand::Rng>(scene: &T, rng: &mut U, ray: Ray) -> Colour {
+fn ray_colour<T: Hitable>(scene: &T, ray: Ray, depth: i32) -> Colour {
     if let Some(record) = scene.hit(&ray, SHADOW_ACNE_MIN, f32::MAX) {
-        let target = record.p + record.normal + random_in_unit_sphere(rng);
-        let next_ray = Ray::new(record.p, target - record.p);
-        Colour::blend(Colour::black(), ray_colour(scene, rng, next_ray), 0.5)
+        // TODO: Some way to do if x and let(y) = z { ... } ?
+        if depth < DEPTH_MAX {
+            if let Some(scatter) = record.material.scatter(&ray, &record) {
+                ray_colour(scene, scatter.ray, depth + 1) * scatter.attenuation
+            } else { Colour::black() }
+        } else { Colour::black() }
     } else {
         let unit_direction = ray.direction().unit_vector();
         let t = (unit_direction.y + 1.0) * 0.5;
@@ -48,7 +39,7 @@ fn ray_colour<T: Hitable, U: rand::Rng>(scene: &T, rng: &mut U, ray: Ray) -> Col
 fn main() {
     let cols = 800;
     let rows = 400;
-    let samples = 10;
+    let samples = 100;
 
     println!("P3");
     println!("{} {}", cols, rows);
@@ -63,20 +54,16 @@ fn main() {
     let vertical = Vec3::new(0.0, 2.0, 0.0);
     let scene = vec![
         Sphere::new(
-            Pt3 {
-                x: 0.0,
-                y: 0.0,
-                z: -1.0,
-            },
-            0.5,
+            Pt3 { x: 0.0, y: 0.0, z: -1.0, }, 0.5, Lambertian { albedo: Albedo { r: 0.8, g: 0.3, b: 0.3, } }
         ),
         Sphere::new(
-            Pt3 {
-                x: 0.0,
-                y: -100.5,
-                z: -1.0,
-            },
-            100.0,
+            Pt3 { x: 0.0, y: -100.5, z: -1.0 }, 100.0, Lambertian { albedo: Albedo { r: 0.8, g: 0.8, b: 0.0, } }
+        ),
+        Sphere::new(
+            Pt3 { x: 1.0, y: 0.0, z: -1.0, }, 0.5, Metal { albedo: Albedo { r: 0.8, g: 0.6, b: 0.2, }, fuzz: 1.0, }
+        ),
+        Sphere::new(
+            Pt3 { x: -1.0, y: 0.0, z: -1.0 }, 0.5, Metal { albedo: Albedo { r: 0.8, g: 0.8, b: 0.8, }, fuzz: 0.3, }
         ),
     ];
 
@@ -98,7 +85,7 @@ fn main() {
                 let u = (col as f32 + du) / cols as f32;
                 let v = (row as f32 + dv) / rows as f32;
                 let ray = camera.get_ray(u, v);
-                colour = colour + ray_colour(&scene, &mut rng, ray);
+                colour = colour + ray_colour(&scene, ray, 0);
             }
             // TODO: Colour blending function rather than math on colours.
             colour = colour / samples;

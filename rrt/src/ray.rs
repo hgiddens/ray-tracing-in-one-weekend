@@ -8,10 +8,12 @@ pub struct Ray {
 }
 
 impl Ray {
+    // TODO: Why bother with this?
     pub fn new(origin: Pt3, direction: Vec3) -> Self {
         Ray { origin, direction }
     }
 
+    // TODO: Better to just expose origin/direction?
     pub fn origin(self) -> Pt3 {
         self.origin
     }

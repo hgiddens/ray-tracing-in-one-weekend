@@ -25,6 +25,18 @@ impl Vec3 {
     }
 }
 
+impl std::ops::Add for Vec3 {
+    type Output = Self;
+
+    fn add(self, v: Vec3) -> Self::Output {
+        Vec3 {
+            x: self.x + v.x,
+            y: self.y + v.y,
+            z: self.z + v.z,
+        }
+    }
+}
+
 impl std::ops::Add<Pt3> for Vec3 {
     type Output = Pt3;
 
@@ -43,6 +55,18 @@ impl std::ops::Add<Vec3> for Pt3 {
 
     fn add(self, v: Vec3) -> Self::Output {
         v + self
+    }
+}
+
+impl std::ops::Sub<Vec3> for Vec3 {
+    type Output = Vec3;
+
+    fn sub(self, v: Vec3) -> Self::Output {
+        Vec3 {
+            x: self.x - v.x,
+            y: self.y - v.y,
+            z: self.z - v.z,
+        }
     }
 }
 
