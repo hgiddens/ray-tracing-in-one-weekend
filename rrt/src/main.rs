@@ -10,7 +10,7 @@ mod vec3;
 use crate::camera::{Camera, SimpleCamera};
 use crate::colour::{Albedo, Colour};
 use crate::hitable::Hitable;
-use crate::material::{Lambertian, Metal};
+use crate::material::{Dielectric, Lambertian, Metal};
 use crate::pt3::Pt3;
 use crate::ray::Ray;
 use crate::sphere::Sphere;
@@ -54,16 +54,19 @@ fn main() {
     let vertical = Vec3::new(0.0, 2.0, 0.0);
     let scene = vec![
         Sphere::new(
-            Pt3 { x: 0.0, y: 0.0, z: -1.0, }, 0.5, Lambertian { albedo: Albedo { r: 0.8, g: 0.3, b: 0.3, } }
+            Pt3 { x: 0.0, y: 0.0, z: -1.0, }, 0.5, Lambertian { albedo: Albedo { r: 0.1, g: 0.2, b: 0.5, } }
         ),
         Sphere::new(
             Pt3 { x: 0.0, y: -100.5, z: -1.0 }, 100.0, Lambertian { albedo: Albedo { r: 0.8, g: 0.8, b: 0.0, } }
         ),
         Sphere::new(
-            Pt3 { x: 1.0, y: 0.0, z: -1.0, }, 0.5, Metal { albedo: Albedo { r: 0.8, g: 0.6, b: 0.2, }, fuzz: 1.0, }
+            Pt3 { x: 1.0, y: 0.0, z: -1.0, }, 0.5, Metal { albedo: Albedo { r: 0.8, g: 0.6, b: 0.2, }, fuzz: 0.3, }
         ),
         Sphere::new(
-            Pt3 { x: -1.0, y: 0.0, z: -1.0 }, 0.5, Metal { albedo: Albedo { r: 0.8, g: 0.8, b: 0.8, }, fuzz: 0.3, }
+            Pt3 { x: -1.0, y: 0.0, z: -1.0 }, 0.5, Dielectric { ref_idx: 1.5 }
+        ),
+        Sphere::new(
+            Pt3 { x: -1.0, y: 0.0, z: -1.0 }, -0.45, Dielectric { ref_idx: 1.5 }
         ),
     ];
 

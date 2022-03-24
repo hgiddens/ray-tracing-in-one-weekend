@@ -12,7 +12,7 @@ impl Vec3 {
         Vec3 { x, y, z }
     }
 
-    fn length(self) -> f32 {
+    pub fn length(self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
 
@@ -55,6 +55,14 @@ impl std::ops::Add<Vec3> for Pt3 {
 
     fn add(self, v: Vec3) -> Self::Output {
         v + self
+    }
+}
+
+impl std::ops::Neg for Vec3 {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Vec3 { x: -self.x, y: -self.y, z: -self.z, }
     }
 }
 
