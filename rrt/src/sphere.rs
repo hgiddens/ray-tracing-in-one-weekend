@@ -11,7 +11,11 @@ pub struct Sphere<'a> {
 
 impl<'a> Sphere<'a> {
     pub fn new<T: 'a + Material>(centre: Pt3, radius: f32, material: T) -> Self {
-        Sphere { centre, radius, material: Box::new(material), }
+        Sphere {
+            centre,
+            radius,
+            material: Box::new(material),
+        }
     }
 }
 

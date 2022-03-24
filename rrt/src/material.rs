@@ -15,7 +15,7 @@ pub trait Material {
 }
 
 pub struct Lambertian {
-    pub albedo: Albedo
+    pub albedo: Albedo,
 }
 
 // TODO: This used to take the RNG as an argument, it'd be nice if it still did(?)
@@ -36,7 +36,10 @@ fn random_in_unit_sphere() -> Vec3 {
 impl Material for Lambertian {
     fn scatter(&self, _ray: &Ray, hit: &HitRecord) -> Option<Scatter> {
         let target = hit.p + hit.normal + random_in_unit_sphere();
-        Some(Scatter { ray: Ray::new(hit.p, target - hit.p), attenuation: self.albedo })
+        Some(Scatter {
+            ray: Ray::new(hit.p, target - hit.p),
+            attenuation: self.albedo,
+        })
     }
 }
 
@@ -54,7 +57,10 @@ impl Material for Metal {
         let reflected = reflect(ray.direction().unit_vector(), hit.normal);
         let scattered = Ray::new(hit.p, reflected + (self.fuzz * random_in_unit_sphere()));
         if scattered.direction().dot(hit.normal) > 0.0 {
-            Some(Scatter { ray: scattered, attenuation: self.albedo })
+            Some(Scatter {
+                ray: scattered,
+                attenuation: self.albedo,
+            })
         } else {
             None
         }
@@ -84,23 +90,41 @@ pub struct Dielectric {
 
 impl Material for Dielectric {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<Scatter> {
-        let attenuation = Albedo { r: 1.0, g: 1.0, b: 1.0, };
+        let attenuation = Albedo {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+        };
         let ray_dot_n = ray.direction().dot(hit.normal);
         let (outward_normal, ni_over_nt, cosine) = if ray_dot_n > 0.0 {
-            (-hit.normal, self.ref_idx, self.ref_idx * ray_dot_n / ray.direction().length())
+            (
+                -hit.normal,
+                self.ref_idx,
+                self.ref_idx * ray_dot_n / ray.direction().length(),
+            )
         } else {
             // TODO: why doesn't cosine here refer to self.ref_idx?
-            (hit.normal, 1.0 / self.ref_idx, -ray_dot_n / ray.direction().length())
+            (
+                hit.normal,
+                1.0 / self.ref_idx,
+                -ray_dot_n / ray.direction().length(),
+            )
         };
 
         if let Some(refracted) = refract(ray.direction(), outward_normal, ni_over_nt) {
             let reflect_prob = schlick(cosine, self.ref_idx);
             if rand::thread_rng().gen::<f32>() >= reflect_prob {
-                return Some(Scatter { ray: Ray::new(hit.p, refracted), attenuation });
+                return Some(Scatter {
+                    ray: Ray::new(hit.p, refracted),
+                    attenuation,
+                });
             }
         }
 
         let reflected = reflect(ray.direction(), hit.normal);
-        Some(Scatter { ray: Ray::new(hit.p, reflected), attenuation })
+        Some(Scatter {
+            ray: Ray::new(hit.p, reflected),
+            attenuation,
+        })
     }
 }
