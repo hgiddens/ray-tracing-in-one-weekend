@@ -37,6 +37,9 @@ impl SimpleCamera {
 impl Camera for SimpleCamera {
     fn get_ray(&self, u: f32, v: f32) -> Ray {
         let direction = self.lower_left_corner + u * self.horizontal + v * self.vertical;
-        Ray::new(self.origin, direction - self.origin)
+        Ray {
+            origin: self.origin,
+            direction: direction - self.origin,
+        }
     }
 }

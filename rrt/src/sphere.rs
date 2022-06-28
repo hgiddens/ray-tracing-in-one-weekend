@@ -1,7 +1,7 @@
-use crate::hitable::{HitRecord, Hitable};
 use crate::material::Material;
 use crate::pt3::Pt3;
 use crate::ray::Ray;
+use crate::scene_object::{HitRecord, SceneObject};
 
 pub struct Sphere<'a> {
     centre: Pt3,
@@ -19,11 +19,11 @@ impl<'a> Sphere<'a> {
     }
 }
 
-impl<'a> Hitable for Sphere<'a> {
-    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        let oc = ray.origin() - self.centre;
-        let a = ray.direction().dot(ray.direction());
-        let b = oc.dot(ray.direction());
+impl<'a> SceneObject<'a> for &'a Sphere<'a> {
+    fn hit(self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'a>> {
+        let oc = ray.origin - self.centre;
+        let a = ray.direction.dot(ray.direction);
+        let b = oc.dot(ray.direction);
         let c = oc.dot(oc) - self.radius * self.radius;
         let discriminant = b * b - a * c;
 

@@ -1,18 +1,18 @@
 mod camera;
 mod colour;
-mod hitable;
 mod material;
 mod pt3;
 mod ray;
+mod scene_object;
 mod sphere;
 mod vec3;
 
 use crate::camera::{Camera, SimpleCamera};
 use crate::colour::{Albedo, Colour};
-use crate::hitable::Hitable;
 use crate::material::{Dielectric, Lambertian, Metal};
 use crate::pt3::Pt3;
 use crate::ray::Ray;
+use crate::scene_object::SceneObject;
 use crate::sphere::Sphere;
 use crate::vec3::Vec3;
 
@@ -21,7 +21,10 @@ use rand::Rng;
 const SHADOW_ACNE_MIN: f32 = 0.001;
 const DEPTH_MAX: i32 = 50;
 
-fn ray_colour<T: Hitable>(scene: &T, ray: Ray, depth: i32) -> Colour {
+fn ray_colour<'a, T>(scene: &'a T, ray: Ray, depth: i32) -> Colour
+where
+    &'a T: SceneObject<'a>,
+{
     if let Some(record) = scene.hit(&ray, SHADOW_ACNE_MIN, f32::MAX) {
         // TODO: Some way to do if x and let(y) = z { ... } ?
         if depth < DEPTH_MAX {
@@ -34,7 +37,7 @@ fn ray_colour<T: Hitable>(scene: &T, ray: Ray, depth: i32) -> Colour {
             Colour::black()
         }
     } else {
-        let unit_direction = ray.direction().unit_vector();
+        let unit_direction = ray.direction.unit_vector();
         let t = (unit_direction.y + 1.0) * 0.5;
         Colour::blend(Colour::white(), Colour::light_sky_blue(), t)
     }

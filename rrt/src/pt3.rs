@@ -2,7 +2,8 @@ use crate::vec3::Vec3;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pt3 {
-    // TODO: Is this dumb?
+    // Best practise in Rust seems to be avoid getters in the absence of
+    // invariants, so this is fine, I think?
     pub x: f32,
     pub y: f32,
     pub z: f32,
