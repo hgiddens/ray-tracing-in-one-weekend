@@ -18,7 +18,9 @@ pub struct Lambertian {
     pub albedo: Albedo,
 }
 
-// TODO: This used to take the RNG as an argument, it'd be nice if it still did(?)
+// TODO: This used to take the RNG as an argument, it'd be nice if it still
+// did. Check other places too. Is there some Rust custom for things like
+// this?
 fn random_in_unit_sphere() -> Vec3 {
     loop {
         let p = Vec3 {

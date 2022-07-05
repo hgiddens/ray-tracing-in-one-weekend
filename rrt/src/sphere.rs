@@ -19,6 +19,8 @@ impl<'a> Sphere<'a> {
     }
 }
 
+// TODO: I think the sphere and the reference can/should have separate
+// lifetimes?
 impl<'a> SceneObject<'a> for &'a Sphere<'a> {
     fn hit(self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord<'a>> {
         let oc = ray.origin - self.centre;
