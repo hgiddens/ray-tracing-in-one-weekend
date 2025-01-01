@@ -14,6 +14,12 @@
   (y 0 :type real)
   (z 0 :type real))
 
+(defun dot (a b)
+  "Dot product of two vectors"
+  (+ (* (vec-x a) (vec-x b))
+     (* (vec-y a) (vec-y b))
+     (* (vec-z a) (vec-z b))))
+
 (defun scaled-vec (v n)
   "Returns a new VEC corresponding to V scaled by N"
   (with-slots (x y z) v
@@ -46,16 +52,31 @@
     (with-slots (vx vy vz) v
       (make-point (+ px vx) (+ py vy) (+ pz vz)))))
 
+(defun point-difference (a b)
+  "Returns the vector representing A - B"
+  (make-vec (- (point-x a) (point-x b))
+            (- (point-y a) (point-y b))
+            (- (point-z a) (point-z b))))
+
 (defstruct ray
   (origin (make-point 0 0 0) :type point)
   (direction (make-vec 0 0 0) :type vec))
 
 (defun ray-colour (r)
   (flet ((lerp (start end n)
-           (+ (* (- 1 n) start) (* n end))))
-    (let* ((unit-direction (unit-vec (ray-direction r)))
-           (n (* 0.5 (1+ (vec-y unit-direction)))))
-      (make-colour (lerp 1 0.5 n) (lerp 1 0.7 n) 1))))
+           (+ (* (- 1 n) start) (* n end)))
+         (hit-sphere (centre radius)
+           (let* ((oc (point-difference (ray-origin r) centre))
+                  (a (dot (ray-direction r) (ray-direction r)))
+                  (b (* 2 (dot oc (ray-direction r))))
+                  (c (- (dot oc oc) (* radius radius)))
+                  (discriminant (- (* b b) (* 4 a c))))
+             (> discriminant 0))))
+    (if (hit-sphere (make-point 0 0 -1) 0.5)
+        (make-colour 1 0 0)
+        (let* ((unit-direction (unit-vec (ray-direction r)))
+               (n (* 0.5 (1+ (vec-y unit-direction)))))
+          (make-colour (lerp 1 0.5 n) (lerp 1 0.7 n) 1)))))
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
