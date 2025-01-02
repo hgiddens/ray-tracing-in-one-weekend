@@ -67,24 +67,54 @@
   (with-slots (origin direction) r
     (offset-point origin (scaled-vec direction n))))
 
-(defun ray-colour (r)
+(defstruct sphere
+  (centre (make-point 0 0 0) :type point)
+  (radius 0 :type real))
+
+(defstruct hit-record
+  (n 0 :type real)
+  (point (make-point 0 0 0) :type point)
+  (normal (make-vec 0 0 0) :type vec))
+
+(defgeneric hit-test (ray object n-min &optional n-max)
+  (:documentation "Tests OBJECT for a hit from RAY between N-MIN and N-MAX, returning a hit-record."))
+
+(defmethod hit-test (ray (sphere sphere) n-min &optional n-max)
+  (with-slots (centre radius) sphere
+    (let* ((oc (point-difference (ray-origin ray) centre))
+           (a (dot (ray-direction ray) (ray-direction ray)))
+           (b (dot oc (ray-direction ray)))
+           (c (- (dot oc oc) (* radius radius)))
+           (discriminant (- (* b b) (* a c))))
+      (when (> discriminant 0)
+        (flet ((root-in-bounds (root)
+                 (if (null n-max)
+                     (< n-min root)
+                     (< n-min root n-max)))
+               (hit-record-for-root (root)
+                 (let* ((hit-point (point-at-parameter ray root))
+                        (normal (unit-vec (scaled-vec (point-difference hit-point centre) radius))))
+                   (make-hit-record :n root :point hit-point :normal normal))))
+          (let ((temp1 (/ (- (- b) (sqrt discriminant)) a))
+                (temp2 (/ (+ (- b) (sqrt discriminant)) a)))
+            (cond
+              ((root-in-bounds temp1) (hit-record-for-root temp1))
+              ((root-in-bounds temp2) (hit-record-for-root temp2)))))))))
+
+(defmethod hit-test (ray (objects sequence) n-min &optional n-max)
+  (let (closest)
+    (dotimes (i (length objects) closest)
+      (let ((hit (hit-test ray (elt objects i) n-min (if closest (hit-record-n closest) n-max))))
+        (when hit
+          (setf closest hit))))))
+
+(defun ray-colour (r world)
   (flet ((lerp (start end n)
            "Linear interpolation of N between START and END"
-           (+ (* (- 1 n) start) (* n end)))
-         (hit-sphere (centre radius)
-           (let* ((oc (point-difference (ray-origin r) centre))
-                  (a (dot (ray-direction r) (ray-direction r)))
-                  (b (* 2 (dot oc (ray-direction r))))
-                  (c (- (dot oc oc) (* radius radius)))
-                  (discriminant (- (* b b) (* 4 a c))))
-             (unless (< discriminant 0)
-               (/ (- (- b) (sqrt discriminant))
-                  (* 2 a))))))
-    (let* ((sphere-centre (make-point 0 0 -1))
-           (hit-n (hit-sphere sphere-centre 0.5)))
-      (if hit-n
-          (with-slots (x y z) (unit-vec (point-difference (point-at-parameter r hit-n)
-                                                          sphere-centre))
+           (+ (* (- 1 n) start) (* n end))))
+    (let ((hit (hit-test r world 0 nil)))
+      (if hit
+          (with-slots (x y z) (hit-record-normal hit)
             (make-colour (* 0.5 (1+ x))
                          (* 0.5 (1+ y))
                          (* 0.5 (1+ z))))
@@ -97,7 +127,9 @@
         (lower-left-corner (make-vec -2 -1 -1))
         (horizontal (make-vec 4 0 0))
         (vertical (make-vec 0 2 0))
-        (origin (make-point 0 0 0)))
+        (origin (make-point 0 0 0))
+        (world (vector (make-sphere :centre (make-point 0 0 -1) :radius 0.5)
+                       (make-sphere :centre (make-point 0 -100.5 -1) :radius 100))))
     (loop for j below ny do
       (loop for i below nx do
         (let* ((u (/ i nx))
@@ -105,7 +137,7 @@
                (r (make-ray :origin origin :direction (summed-vecs lower-left-corner
                                                                    (scaled-vec horizontal u)
                                                                    (scaled-vec vertical v)))))
-          (setf (aref a j i) (ray-colour r)))))
+          (setf (aref a j i) (ray-colour r world)))))
     a))
 
 (defun write-image (image)
