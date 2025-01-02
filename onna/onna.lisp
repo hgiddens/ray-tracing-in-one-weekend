@@ -48,9 +48,9 @@
 
 (defun offset-point (p v)
   "Returns a new POINT offset from P by V"
-  (with-slots (px py pz) p
-    (with-slots (vx vy vz) v
-      (make-point (+ px vx) (+ py vy) (+ pz vz)))))
+  (make-point (+ (point-x p) (vec-x v))
+              (+ (point-y p) (vec-y v))
+              (+ (point-z p) (vec-z v))))
 
 (defun point-difference (a b)
   "Returns the vector representing A - B"
@@ -62,8 +62,14 @@
   (origin (make-point 0 0 0) :type point)
   (direction (make-vec 0 0 0) :type vec))
 
+(defun point-at-parameter (r n)
+  "The point at time T along R"
+  (with-slots (origin direction) r
+    (offset-point origin (scaled-vec direction n))))
+
 (defun ray-colour (r)
   (flet ((lerp (start end n)
+           "Linear interpolation of N between START and END"
            (+ (* (- 1 n) start) (* n end)))
          (hit-sphere (centre radius)
            (let* ((oc (point-difference (ray-origin r) centre))
@@ -71,12 +77,20 @@
                   (b (* 2 (dot oc (ray-direction r))))
                   (c (- (dot oc oc) (* radius radius)))
                   (discriminant (- (* b b) (* 4 a c))))
-             (> discriminant 0))))
-    (if (hit-sphere (make-point 0 0 -1) 0.5)
-        (make-colour 1 0 0)
-        (let* ((unit-direction (unit-vec (ray-direction r)))
-               (n (* 0.5 (1+ (vec-y unit-direction)))))
-          (make-colour (lerp 1 0.5 n) (lerp 1 0.7 n) 1)))))
+             (unless (< discriminant 0)
+               (/ (- (- b) (sqrt discriminant))
+                  (* 2 a))))))
+    (let* ((sphere-centre (make-point 0 0 -1))
+           (hit-n (hit-sphere sphere-centre 0.5)))
+      (if hit-n
+          (with-slots (x y z) (unit-vec (point-difference (point-at-parameter r hit-n)
+                                                          sphere-centre))
+            (make-colour (* 0.5 (1+ x))
+                         (* 0.5 (1+ y))
+                         (* 0.5 (1+ z))))
+          (let* ((unit-direction (unit-vec (ray-direction r)))
+                 (n (* 0.5 (1+ (vec-y unit-direction)))))
+            (make-colour (lerp 1 0.5 n) (lerp 1 0.7 n) 1))))))
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
