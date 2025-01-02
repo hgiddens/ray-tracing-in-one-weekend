@@ -5,6 +5,16 @@
   (g 0 :type (real 0 1))
   (b 0 :type (real 0 1)))
 
+(defun blend-colours (&rest colours)
+  (when colours
+    (let ((r 0) (g 0) (b 0) (l 0))
+      (dolist (colour colours)
+        (incf r (colour-r colour))
+        (incf g (colour-g colour))
+        (incf b (colour-b colour))
+        (incf l))
+      (make-colour (/ r l) (/ g l) (/ b l)))))
+
 (defun colour-8bit (c)
   (flet ((8bit (x) (floor (* x 255.99))))
     (list (8bit (colour-r c)) (8bit (colour-g c)) (8bit (colour-b c)))))
@@ -108,6 +118,20 @@
         (when hit
           (setf closest hit))))))
 
+(defstruct camera
+  (lower-left-corner (make-point 0 0 0) :type point)
+  (horizontal (make-vec 0 0 0) :type vec)
+  (vertical (make-vec 0 0 0) :type vec)
+  (origin (make-point 0 0 0) :type point))
+
+(defun get-ray (camera u v)
+  (with-slots (lower-left-corner horizontal vertical origin) camera
+    (make-ray :origin origin
+              :direction (summed-vecs lower-left-corner
+                                      (scaled-vec horizontal u)
+                                      (scaled-vec vertical v)
+                                      (point-difference (make-point 0 0 0) origin)))))
+
 (defun ray-colour (r world)
   (flet ((lerp (start end n)
            "Linear interpolation of N between START and END"
@@ -124,20 +148,20 @@
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
-        (lower-left-corner (make-vec -2 -1 -1))
-        (horizontal (make-vec 4 0 0))
-        (vertical (make-vec 0 2 0))
-        (origin (make-point 0 0 0))
+        (camera (make-camera :lower-left-corner (make-point -2 -1 -1)
+                             :horizontal (make-vec 4 0 0)
+                             :vertical (make-vec 0 2 0)))
         (world (vector (make-sphere :centre (make-point 0 0 -1) :radius 0.5)
                        (make-sphere :centre (make-point 0 -100.5 -1) :radius 100))))
     (loop for j below ny do
       (loop for i below nx do
-        (let* ((u (/ i nx))
-               (v (/ j ny))
-               (r (make-ray :origin origin :direction (summed-vecs lower-left-corner
-                                                                   (scaled-vec horizontal u)
-                                                                   (scaled-vec vertical v)))))
-          (setf (aref a j i) (ray-colour r world)))))
+        (let (samples)
+          (dotimes (s 100)
+            (let* ((u (/ (+ i (random 1.0)) nx))
+                   (v (/ (+ j (random 1.0)) ny))
+                   (r (get-ray camera u v)))
+              (push (ray-colour r world) samples)))
+          (setf (aref a j i) (apply #'blend-colours samples)))))
     a))
 
 (defun write-image (image)
