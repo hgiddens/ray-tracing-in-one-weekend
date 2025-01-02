@@ -19,6 +19,10 @@
   (flet ((8bit (x) (floor (* x 255.99))))
     (list (8bit (colour-r c)) (8bit (colour-g c)) (8bit (colour-b c)))))
 
+(defun gamma2 (c)
+  (with-slots (r g b) c
+    (make-colour (sqrt r) (sqrt g) (sqrt b))))
+
 (defstruct (vec (:constructor make-vec (x y z)))
   (x 0 :type real)
   (y 0 :type real)
@@ -29,6 +33,14 @@
   (+ (* (vec-x a) (vec-x b))
      (* (vec-y a) (vec-y b))
      (* (vec-z a) (vec-z b))))
+
+(defun random-in-unit-sphere ()
+  (flet ((vec-in-unit-cube ()
+           (make-vec (1- (random 2.0)) (1- (random 2.0)) (1- (random 2.0))))
+         (vec-in-unit-sphere-p (v)
+           (and (< (vec-squared-length v) 1) v)))
+    (loop for v = (vec-in-unit-cube)
+          thereis (vec-in-unit-sphere-p v))))
 
 (defun scaled-vec (v n)
   "Returns a new VEC corresponding to V scaled by N"
@@ -44,15 +56,18 @@
         (incf y (vec-y v))
         (incf z (vec-z v))))))
 
-(defun vec-length (v)
-  (with-slots (x y z) v
-    (sqrt (+ (* x x) (* y y) (* z z)))))
-
 (defun unit-vec (v)
   "Returns a new VEC representing V scaled to a unit length"
   (with-slots (x y z) v
     (let ((l (vec-length v)))
       (make-vec (/ x l) (/ y l) (/ z l)))))
+
+(defun vec-length (v)
+  (sqrt (vec-squared-length v)))
+
+(defun vec-squared-length (v)
+  (with-slots (x y z) v
+    (+ (* x x) (* y y) (* z z))))
 
 (defstruct (point (:constructor make-point (x y z)) (:include vec)))
 
@@ -136,12 +151,14 @@
   (flet ((lerp (start end n)
            "Linear interpolation of N between START and END"
            (+ (* (- 1 n) start) (* n end))))
-    (let ((hit (hit-test r world 0 nil)))
+    (let ((hit (hit-test r world 0.001 nil)))
       (if hit
-          (with-slots (x y z) (hit-record-normal hit)
-            (make-colour (* 0.5 (1+ x))
-                         (* 0.5 (1+ y))
-                         (* 0.5 (1+ z))))
+          (let* ((target (offset-point (hit-record-point hit)
+                                       (summed-vecs (hit-record-normal hit) (random-in-unit-sphere))))
+                 (successor-ray (make-ray :origin (hit-record-point hit)
+                                          :direction (point-difference target (hit-record-point hit)))))
+            (blend-colours (make-colour 0 0 0)
+                           (ray-colour successor-ray world)))
           (let* ((unit-direction (unit-vec (ray-direction r)))
                  (n (* 0.5 (1+ (vec-y unit-direction)))))
             (make-colour (lerp 1 0.5 n) (lerp 1 0.7 n) 1))))))
@@ -165,10 +182,10 @@
     a))
 
 (defun write-image (image)
-  "Writes an image in PPM format to *STANDARD-OUT*."
+  "Writes an image in PPM format to *standard-output*."
   (destructuring-bind (ny nx) (array-dimensions image)
     (format t "P3~%~D ~D~%255~%" nx ny)
     (loop for j from (1- ny) downto 0 do
       (loop for i from 0 below nx do
-        (destructuring-bind (ir ig ib) (colour-8bit (aref image j i))
+        (destructuring-bind (ir ig ib) (colour-8bit (gamma2 (aref image j i)))
           (format t "~D ~D ~D~%" ir ig ib))))))
