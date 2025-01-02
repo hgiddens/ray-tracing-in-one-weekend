@@ -5,6 +5,11 @@
   (g 0 :type (real 0 1))
   (b 0 :type (real 0 1)))
 
+(defun attenuate (by colour)
+  (make-colour (* (colour-r by) (colour-r colour))
+               (* (colour-g by) (colour-g colour))
+               (* (colour-b by) (colour-b colour))))
+
 (defun blend-colours (&rest colours)
   (when colours
     (let ((r 0) (g 0) (b 0) (l 0))
@@ -42,12 +47,16 @@
     (loop for v = (vec-in-unit-cube)
           thereis (vec-in-unit-sphere-p v))))
 
+(defun reflect (v n)
+  "Returns a new VEC corresponding to V reflected according to surface normal N"
+  (vec- v (scaled-vec n (* 2 (dot v n)))))
+
 (defun scaled-vec (v n)
   "Returns a new VEC corresponding to V scaled by N"
   (with-slots (x y z) v
     (make-vec (* x n) (* y n) (* z n))))
 
-(defun summed-vecs (&rest vs)
+(defun vec+ (&rest vs)
   "Returns a new VEC representing the sum of VS"
   (let ((s (make-vec 0 0 0)))
     (with-slots (x y z) s
@@ -55,6 +64,19 @@
         (incf x (vec-x v))
         (incf y (vec-y v))
         (incf z (vec-z v))))))
+
+(defun vec- (&rest vs)
+  "See vec+"
+  (cond
+    ((null vs) (make-vec 0 0 0))
+    ((null (cdr vs)) (with-slots (x y z) (car vs)
+                       (make-vec (- x) (- y) (- z))))
+    (t (let ((s (car vs)))
+         (with-slots (x y z) s
+           (dolist (v (cdr vs) s)
+             (decf x (vec-x v))
+             (decf y (vec-y v))
+             (decf z (vec-z v))))))))
 
 (defun unit-vec (v)
   "Returns a new VEC representing V scaled to a unit length"
@@ -94,18 +116,20 @@
 
 (defstruct sphere
   (centre (make-point 0 0 0) :type point)
-  (radius 0 :type real))
+  (radius 0 :type real)
+  material)
 
 (defstruct hit-record
   (n 0 :type real)
   (point (make-point 0 0 0) :type point)
-  (normal (make-vec 0 0 0) :type vec))
+  (normal (make-vec 0 0 0) :type vec)
+  material)
 
 (defgeneric hit-test (ray object n-min &optional n-max)
   (:documentation "Tests OBJECT for a hit from RAY between N-MIN and N-MAX, returning a hit-record."))
 
 (defmethod hit-test (ray (sphere sphere) n-min &optional n-max)
-  (with-slots (centre radius) sphere
+  (with-slots (centre radius material) sphere
     (let* ((oc (point-difference (ray-origin ray) centre))
            (a (dot (ray-direction ray) (ray-direction ray)))
            (b (dot oc (ray-direction ray)))
@@ -119,7 +143,7 @@
                (hit-record-for-root (root)
                  (let* ((hit-point (point-at-parameter ray root))
                         (normal (unit-vec (scaled-vec (point-difference hit-point centre) radius))))
-                   (make-hit-record :n root :point hit-point :normal normal))))
+                   (make-hit-record :n root :point hit-point :normal normal :material material))))
           (let ((temp1 (/ (- (- b) (sqrt discriminant)) a))
                 (temp2 (/ (+ (- b) (sqrt discriminant)) a)))
             (cond
@@ -142,42 +166,90 @@
 (defun get-ray (camera u v)
   (with-slots (lower-left-corner horizontal vertical origin) camera
     (make-ray :origin origin
-              :direction (summed-vecs lower-left-corner
-                                      (scaled-vec horizontal u)
-                                      (scaled-vec vertical v)
-                                      (point-difference (make-point 0 0 0) origin)))))
+              :direction (vec+ lower-left-corner
+                               (scaled-vec horizontal u)
+                               (scaled-vec vertical v)
+                               (point-difference (make-point 0 0 0) origin)))))
 
-(defun ray-colour (r world)
+(defstruct scatter-record
+  (attenuation (make-colour 0 0 0) :type colour)
+  (scatter-ray (make-ray) :type ray))
+
+(defgeneric scatter* (material ray-in hit)
+  (:documentation "Materail; scatters RAY-IN at HIT and returns a scatter-record"))
+
+(defun scatter (ray-in hit)
+  (scatter* (hit-record-material hit) ray-in hit))
+
+(defstruct lambertian (albedo (make-colour 0 0 0) :type colour))
+
+(defmethod scatter* ((material lambertian) ray-in hit)
+  (let ((target (offset-point (hit-record-point hit)
+                              (vec+ (hit-record-normal hit) (random-in-unit-sphere)))))
+    (make-scatter-record :attenuation (lambertian-albedo material)
+                         :scatter-ray (make-ray :origin (hit-record-point hit)
+                                                :direction (point-difference target (hit-record-point hit))))))
+
+(defstruct metal
+  (albedo (make-colour 0 0 0) :type colour)
+  (fuzz 0 :type (real 0 1)))
+
+(defmethod scatter* ((material metal) ray-in hit)
+  (let* ((reflected (reflect (unit-vec (ray-direction ray-in)) (hit-record-normal hit)))
+         (scattered (make-ray :origin (hit-record-point hit)
+                              :direction (vec+ reflected
+                                               (scaled-vec (random-in-unit-sphere)
+                                                           (metal-fuzz material))))))
+    (when (> (dot reflected (hit-record-normal hit)) 0)
+      (make-scatter-record :attenuation (metal-albedo material)
+                           :scatter-ray scattered))))
+
+(defparameter *ray-recursion-depth-limit* 50)
+
+(defun ray-colour (r world depth)
   (flet ((lerp (start end n)
            "Linear interpolation of N between START and END"
            (+ (* (- 1 n) start) (* n end))))
     (let ((hit (hit-test r world 0.001 nil)))
       (if hit
-          (let* ((target (offset-point (hit-record-point hit)
-                                       (summed-vecs (hit-record-normal hit) (random-in-unit-sphere))))
-                 (successor-ray (make-ray :origin (hit-record-point hit)
-                                          :direction (point-difference target (hit-record-point hit)))))
-            (blend-colours (make-colour 0 0 0)
-                           (ray-colour successor-ray world)))
+          (let ((scatter (scatter r hit)))
+            (if (and (< depth *ray-recursion-depth-limit*) scatter)
+                (attenuate (scatter-record-attenuation scatter)
+                           (ray-colour (scatter-record-scatter-ray scatter) world (1+ depth)))
+                (make-colour 0 0 0)))
           (let* ((unit-direction (unit-vec (ray-direction r)))
                  (n (* 0.5 (1+ (vec-y unit-direction)))))
             (make-colour (lerp 1 0.5 n) (lerp 1 0.7 n) 1))))))
+
+(defparameter *antialiasing-sample-count* 100)
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
         (camera (make-camera :lower-left-corner (make-point -2 -1 -1)
                              :horizontal (make-vec 4 0 0)
                              :vertical (make-vec 0 2 0)))
-        (world (vector (make-sphere :centre (make-point 0 0 -1) :radius 0.5)
-                       (make-sphere :centre (make-point 0 -100.5 -1) :radius 100))))
+        (world (vector (make-sphere :centre (make-point 0 0 -1)
+                                    :radius 0.5
+                                    :material (make-lambertian :albedo (make-colour 0.8 0.3 0.3)))
+                       (make-sphere :centre (make-point 0 -100.5 -1)
+                                    :radius 100
+                                    :material (make-lambertian :albedo (make-colour 0.8 0.8 0.0)))
+                       (make-sphere :centre (make-point 1 0 -1)
+                                    :radius 0.5
+                                    :material (make-metal :albedo (make-colour 0.8 0.6 0.2)
+                                                          :fuzz 1))
+                       (make-sphere :centre (make-point -1 0 -1)
+                                    :radius 0.5
+                                    :material (make-metal :albedo (make-colour 0.8 0.8 0.8)
+                                                          :fuzz 0.3)))))
     (loop for j below ny do
       (loop for i below nx do
         (let (samples)
-          (dotimes (s 100)
+          (dotimes (s *antialiasing-sample-count*)
             (let* ((u (/ (+ i (random 1.0)) nx))
                    (v (/ (+ j (random 1.0)) ny))
                    (r (get-ray camera u v)))
-              (push (ray-colour r world) samples)))
+              (push (ray-colour r world 0) samples)))
           (setf (aref a j i) (apply #'blend-colours samples)))))
     a))
 
