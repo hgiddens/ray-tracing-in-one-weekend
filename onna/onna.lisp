@@ -51,6 +51,15 @@
   "Returns a new VEC corresponding to V reflected according to surface normal N"
   (vec- v (scaled-vec n (* 2 (dot v n)))))
 
+(defun refract (v n ni/nt)
+  ;; Something something Snell's law?
+  (let* ((uv (unit-vec v))
+         (dt (dot uv n))
+         (discriminant (- 1 (* ni/nt ni/nt (- 1 (* dt dt))))))
+    (when (> discriminant 0)
+      (vec- (scaled-vec (vec- uv (scaled-vec n dt)) ni/nt)
+            (scaled-vec n (sqrt discriminant))))))
+
 (defun scaled-vec (v n)
   "Returns a new VEC corresponding to V scaled by N"
   (with-slots (x y z) v
@@ -71,7 +80,7 @@
     ((null vs) (make-vec 0 0 0))
     ((null (cdr vs)) (with-slots (x y z) (car vs)
                        (make-vec (- x) (- y) (- z))))
-    (t (let ((s (car vs)))
+    (t (let ((s (copy-vec (car vs))))
          (with-slots (x y z) s
            (dolist (v (cdr vs) s)
              (decf x (vec-x v))
@@ -175,34 +184,61 @@
   (attenuation (make-colour 0 0 0) :type colour)
   (scatter-ray (make-ray) :type ray))
 
-(defgeneric scatter* (material ray-in hit)
+(defgeneric scatter* (material ray-in hit-point hit-normal)
   (:documentation "Materail; scatters RAY-IN at HIT and returns a scatter-record"))
 
 (defun scatter (ray-in hit)
-  (scatter* (hit-record-material hit) ray-in hit))
+  (scatter* (hit-record-material hit) ray-in (hit-record-point hit) (hit-record-normal hit)))
 
 (defstruct lambertian (albedo (make-colour 0 0 0) :type colour))
 
-(defmethod scatter* ((material lambertian) ray-in hit)
-  (let ((target (offset-point (hit-record-point hit)
-                              (vec+ (hit-record-normal hit) (random-in-unit-sphere)))))
+(defmethod scatter* ((material lambertian) ray-in hit-point hit-normal)
+  (let ((target (offset-point hit-point (vec+ hit-normal (random-in-unit-sphere)))))
     (make-scatter-record :attenuation (lambertian-albedo material)
-                         :scatter-ray (make-ray :origin (hit-record-point hit)
-                                                :direction (point-difference target (hit-record-point hit))))))
+                         :scatter-ray (make-ray :origin hit-point
+                                                :direction (point-difference target hit-point)))))
 
 (defstruct metal
   (albedo (make-colour 0 0 0) :type colour)
   (fuzz 0 :type (real 0 1)))
 
-(defmethod scatter* ((material metal) ray-in hit)
-  (let* ((reflected (reflect (unit-vec (ray-direction ray-in)) (hit-record-normal hit)))
-         (scattered (make-ray :origin (hit-record-point hit)
+(defmethod scatter* ((material metal) ray-in hit-point hit-normal)
+  (let* ((reflected (reflect (unit-vec (ray-direction ray-in)) hit-normal))
+         (scattered (make-ray :origin hit-point
                               :direction (vec+ reflected
                                                (scaled-vec (random-in-unit-sphere)
                                                            (metal-fuzz material))))))
-    (when (> (dot reflected (hit-record-normal hit)) 0)
+    (when (> (dot reflected hit-normal) 0)
       (make-scatter-record :attenuation (metal-albedo material)
                            :scatter-ray scattered))))
+
+(defstruct dielectric (refractive-index 0 :type real))
+
+(defun schlick (cosine ref-idx)
+  (let ((r0 (/ (- 1 ref-idx) (+ 1 ref-idx))))
+    (setf r0 (* r0 r0))
+    (+ r0 (* (- 1 r0) (expt (- 1 cosine) 5)))))
+
+(defmethod scatter* ((material dielectric) ray-in hit-point hit-normal)
+  (let ((ref-idx (dielectric-refractive-index material))
+        (attenuation (make-colour 1 1 1)))
+    (destructuring-bind (outward-normal ni/nt cosine)
+        (if (> (dot (ray-direction ray-in) hit-normal) 0)
+            (list (vec- hit-normal)
+                  ref-idx
+                  (/ (* ref-idx (dot (ray-direction ray-in) hit-normal))
+                     (vec-length (ray-direction ray-in))))
+            (list hit-normal
+                  (/ 1 ref-idx)
+                  (/ (- (dot (ray-direction ray-in) hit-normal))
+                     (vec-length (ray-direction ray-in)))))
+      (let* ((refracted (refract (ray-direction ray-in) outward-normal ni/nt))
+             (scatter-direction (if (or (null refracted) (< (random 1.0) (schlick cosine ref-idx)))
+                                    (reflect (ray-direction ray-in) hit-normal)
+                                    refracted)))
+        (make-scatter-record :attenuation attenuation
+                             :scatter-ray (make-ray :origin hit-point
+                                                    :direction scatter-direction))))))
 
 (defparameter *ray-recursion-depth-limit* 50)
 
@@ -223,25 +259,28 @@
 
 (defparameter *antialiasing-sample-count* 100)
 
+(defparameter *scene* (vector (make-sphere :centre (make-point 0 0 -1)
+                                           :radius 0.5
+                                           :material (make-lambertian :albedo (make-colour 0.1 0.2 0.5)))
+                              (make-sphere :centre (make-point 0 -100.5 -1)
+                                           :radius 100
+                                           :material (make-lambertian :albedo (make-colour 0.8 0.8 0.0)))
+                              (make-sphere :centre (make-point 1 0 -1)
+                                           :radius 0.5
+                                           :material (make-metal :albedo (make-colour 0.8 0.6 0.2)
+                                                                 :fuzz 0.1))
+                              (make-sphere :centre (make-point -1 0 -1)
+                                           :radius 0.5
+                                           :material (make-dielectric :refractive-index 1.5))
+                              (make-sphere :centre (make-point -1 0 -1)
+                                           :radius -0.45
+                                           :material (make-dielectric :refractive-index 1.5))))
+
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
         (camera (make-camera :lower-left-corner (make-point -2 -1 -1)
                              :horizontal (make-vec 4 0 0)
-                             :vertical (make-vec 0 2 0)))
-        (world (vector (make-sphere :centre (make-point 0 0 -1)
-                                    :radius 0.5
-                                    :material (make-lambertian :albedo (make-colour 0.8 0.3 0.3)))
-                       (make-sphere :centre (make-point 0 -100.5 -1)
-                                    :radius 100
-                                    :material (make-lambertian :albedo (make-colour 0.8 0.8 0.0)))
-                       (make-sphere :centre (make-point 1 0 -1)
-                                    :radius 0.5
-                                    :material (make-metal :albedo (make-colour 0.8 0.6 0.2)
-                                                          :fuzz 1))
-                       (make-sphere :centre (make-point -1 0 -1)
-                                    :radius 0.5
-                                    :material (make-metal :albedo (make-colour 0.8 0.8 0.8)
-                                                          :fuzz 0.3)))))
+                             :vertical (make-vec 0 2 0))))
     (loop for j below ny do
       (loop for i below nx do
         (let (samples)
@@ -249,7 +288,7 @@
             (let* ((u (/ (+ i (random 1.0)) nx))
                    (v (/ (+ j (random 1.0)) ny))
                    (r (get-ray camera u v)))
-              (push (ray-colour r world 0) samples)))
+              (push (ray-colour r *scene* 0) samples)))
           (setf (aref a j i) (apply #'blend-colours samples)))))
     a))
 
