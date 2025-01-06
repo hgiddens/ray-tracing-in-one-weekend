@@ -1,5 +1,10 @@
 (in-package #:onna)
 
+;; TODO: This is outrageously slow. However, if we compile with
+;; (declaim (optimize (speed 3) (space 0) (compilation-speed 0)))
+;; or similar, we get a ton of guidance about _why_ it's so slow,
+;; which I guess I should follow one day.
+
 (defstruct (colour (:constructor make-colour (r g b)))
   (r 0 :type (real 0 1))
   (g 0 :type (real 0 1))
@@ -319,15 +324,60 @@
                                            :radius -0.45
                                            :material (make-dielectric :refractive-index 1.5))))
 
+(defun test-scene ()
+  (let* ((small-radius 0.2)
+         (big-radius 1)
+         (clear-centre (make-point 4 small-radius 0))
+         (clear-radius 0.9)
+         list)
+    (push (make-sphere :centre (make-point 0 -1000 0)
+                       :radius 1000
+                       :material (make-lambertian :albedo (make-colour 0.5 0.5 0.5)))
+          list)
+    (push (make-sphere :centre (make-point 0 1 0)
+                       :radius big-radius
+                       :material (make-dielectric :refractive-index 1.5))
+          list)
+    (push (make-sphere :centre (make-point -4 1 0)
+                       :radius big-radius
+                       :material (make-lambertian :albedo (make-colour 0.4 0.2 0.1)))
+          list)
+    (push (make-sphere :centre (make-point 4 1 0)
+                       :radius big-radius
+                       :material (make-metal :albedo (make-colour 0.7 0.6 0.5) :fuzz 0))
+          list)
+
+    (flet ((choose-material ()
+             (let ((m (random 1.0)))
+               (cond
+                 ((< m 0.8)
+                  (make-lambertian :albedo (make-colour (* (random 1.0) (random 1.0))
+                                                        (* (random 1.0) (random 1.0))
+                                                        (* (random 1.0) (random 1.0)))))
+                 ((< m 0.95)
+                  (make-metal :albedo (make-colour (* 0.5 (1+ (random 1.0)))
+                                                   (* 0.5 (1+ (random 1.0)))
+                                                   (* 0.5 (1+ (random 1.0))))
+                              :fuzz (random 0.5)))
+                 (t
+                  (make-dielectric :refractive-index 1.5))))))
+      (loop for a from -11 below 11 do
+        (loop for b from -11 below 11
+              as centre = (make-point (+ a (random 0.9)) small-radius (+ b (random 0.9)))
+              when (> (vec-length (point-difference centre clear-centre)) clear-radius)
+                do (push (make-sphere :centre centre :radius small-radius :material (choose-material)) list))))
+
+    (coerce list 'vector)))
+
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
-        (camera (let ((from (make-point 3 3 2))
-                      (at (make-point 0 0 -1)))
+        (camera (let ((from (make-point 15 2 3))
+                      (at (make-point -2 0.2 -1)))
                   (make-camera :from from
                                :at at
-                               :vertical-fov 20
+                               :vertical-fov 13
                                :aspect-ratio (/ nx ny)
-                               :lens-radius 1
+                               :lens-radius 0.1
                                :focus-distance (vec-length (point-difference from at))))))
     (loop for j below ny do
       (loop for i below nx do
