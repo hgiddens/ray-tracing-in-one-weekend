@@ -33,6 +33,12 @@
   (y 0 :type real)
   (z 0 :type real))
 
+(defun cross (a b)
+  "Cross product of two vectors"
+  (make-vec (- (* (vec-y a) (vec-z b)) (* (vec-z a) (vec-y b)))
+            (- (* (vec-z a) (vec-x b)) (* (vec-x a) (vec-z b)))
+            (- (* (vec-x a) (vec-y b)) (* (vec-y a) (vec-x b)))))
+
 (defun dot (a b)
   "Dot product of two vectors"
   (+ (* (vec-x a) (vec-x b))
@@ -166,11 +172,30 @@
         (when hit
           (setf closest hit))))))
 
-(defstruct camera
+(defstruct (camera (:constructor nil))
   (lower-left-corner (make-point 0 0 0) :type point)
   (horizontal (make-vec 0 0 0) :type vec)
   (vertical (make-vec 0 0 0) :type vec)
   (origin (make-point 0 0 0) :type point))
+
+(defun make-camera (&key from at (up (make-vec 0 1 0)) vertical-fov aspect-ratio)
+  "A camera with the specified vertical field of view (in degrees) and aspect ratio"
+  (let* ((theta (/ (* vertical-fov pi) 180))
+         (height/2 (tan (/ theta 2)))
+         (width/2 (* aspect-ratio height/2))
+         (camera (make-instance 'camera))
+         (w (unit-vec (point-difference from at)))
+         (u (unit-vec (cross up w)))
+         (v (cross w u)))
+    (with-slots (lower-left-corner horizontal vertical origin) camera
+      (setf lower-left-corner (vec- from
+                                    (scaled-vec u width/2)
+                                    (scaled-vec v height/2)
+                                    w)
+            horizontal (scaled-vec u (* 2 width/2))
+            vertical (scaled-vec v (* 2 height/2))
+            origin from))
+    camera))
 
 (defun get-ray (camera u v)
   (with-slots (lower-left-corner horizontal vertical origin) camera
@@ -278,9 +303,10 @@
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
-        (camera (make-camera :lower-left-corner (make-point -2 -1 -1)
-                             :horizontal (make-vec 4 0 0)
-                             :vertical (make-vec 0 2 0))))
+        (camera (make-camera :from (make-point -2 2 1)
+                             :at (make-point 0 0 -1)
+                             :vertical-fov 20
+                             :aspect-ratio (/ nx ny))))
     (loop for j below ny do
       (loop for i below nx do
         (let (samples)
