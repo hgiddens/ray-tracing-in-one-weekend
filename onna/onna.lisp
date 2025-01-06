@@ -53,6 +53,14 @@
     (loop for v = (vec-in-unit-cube)
           thereis (vec-in-unit-sphere-p v))))
 
+(defun random-in-unit-disc ()
+  (flet ((vec-in-unit-disc-p (v)
+           (and (< (dot v v) 1) v)))
+    (loop for x = (1- (random 2.0))
+          for y = (1- (random 2.0))
+          as v = (make-vec x y 0)
+          thereis (vec-in-unit-disc-p v))))
+
 (defun reflect (v n)
   "Returns a new VEC corresponding to V reflected according to surface normal N"
   (vec- v (scaled-vec n (* 2 (dot v n)))))
@@ -176,9 +184,12 @@
   (lower-left-corner (make-point 0 0 0) :type point)
   (horizontal (make-vec 0 0 0) :type vec)
   (vertical (make-vec 0 0 0) :type vec)
-  (origin (make-point 0 0 0) :type point))
+  (origin (make-point 0 0 0) :type point)
+  (u (make-vec 0 0 0) :type vec)
+  (v (make-vec 0 0 0) :type vec)
+  (lens-radius 0 :type real))
 
-(defun make-camera (&key from at (up (make-vec 0 1 0)) vertical-fov aspect-ratio)
+(defun make-camera (&key from at (up (make-vec 0 1 0)) vertical-fov aspect-ratio lens-radius focus-distance)
   "A camera with the specified vertical field of view (in degrees) and aspect ratio"
   (let* ((theta (/ (* vertical-fov pi) 180))
          (height/2 (tan (/ theta 2)))
@@ -189,21 +200,28 @@
          (v (cross w u)))
     (with-slots (lower-left-corner horizontal vertical origin) camera
       (setf lower-left-corner (vec- from
-                                    (scaled-vec u width/2)
-                                    (scaled-vec v height/2)
-                                    w)
-            horizontal (scaled-vec u (* 2 width/2))
-            vertical (scaled-vec v (* 2 height/2))
-            origin from))
+                                    (scaled-vec u (* width/2 focus-distance))
+                                    (scaled-vec v (* height/2 focus-distance))
+                                    (scaled-vec w focus-distance))
+            horizontal (scaled-vec u (* 2 width/2 focus-distance))
+            vertical (scaled-vec v (* 2 height/2 focus-distance))
+            origin from
+            (slot-value camera 'u) u
+            (slot-value camera 'v) v
+            (slot-value camera 'lens-radius) lens-radius))
     camera))
 
-(defun get-ray (camera u v)
-  (with-slots (lower-left-corner horizontal vertical origin) camera
-    (make-ray :origin origin
-              :direction (vec+ lower-left-corner
-                               (scaled-vec horizontal u)
-                               (scaled-vec vertical v)
-                               (point-difference (make-point 0 0 0) origin)))))
+(defun get-ray (camera s t*)
+  (with-slots (lower-left-corner horizontal vertical origin lens-radius u v) camera
+    (let* ((untransformed-offset (scaled-vec (random-in-unit-disc) lens-radius))
+           (offset (vec+ (scaled-vec u (vec-x untransformed-offset))
+                         (scaled-vec v (vec-y untransformed-offset)))))
+      (make-ray :origin (offset-point origin offset)
+                :direction (vec+ lower-left-corner
+                                 (scaled-vec horizontal s)
+                                 (scaled-vec vertical t*)
+                                 (point-difference (make-point 0 0 0) origin)
+                                 (vec- offset))))))
 
 (defstruct scatter-record
   (attenuation (make-colour 0 0 0) :type colour)
@@ -303,10 +321,14 @@
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
-        (camera (make-camera :from (make-point -2 2 1)
-                             :at (make-point 0 0 -1)
-                             :vertical-fov 20
-                             :aspect-ratio (/ nx ny))))
+        (camera (let ((from (make-point 3 3 2))
+                      (at (make-point 0 0 -1)))
+                  (make-camera :from from
+                               :at at
+                               :vertical-fov 20
+                               :aspect-ratio (/ nx ny)
+                               :lens-radius 1
+                               :focus-distance (vec-length (point-difference from at))))))
     (loop for j below ny do
       (loop for i below nx do
         (let (samples)
