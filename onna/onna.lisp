@@ -1,9 +1,7 @@
 (in-package #:onna)
 
-;; TODO: This is outrageously slow. However, if we compile with
-;; (declaim (optimize (speed 3) (space 0) (compilation-speed 0)))
-;; or similar, we get a ton of guidance about _why_ it's so slow,
-;; which I guess I should follow one day.
+(declaim (optimize (speed 0) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
+;; (declaim (optimize (speed 3) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
 
 (defstruct (colour (:constructor make-colour (r g b)))
   (r 0 :type (real 0 1))
@@ -33,10 +31,21 @@
   (with-slots (r g b) c
     (make-colour (sqrt r) (sqrt g) (sqrt b))))
 
-(defstruct (vec (:constructor make-vec (x y z)))
-  (x 0 :type real)
-  (y 0 :type real)
-  (z 0 :type real))
+(defstruct (vec (:constructor make-vec (x y z &aux
+                                                (x (coerce x 'double-float))
+                                                (y (coerce y 'double-float))
+                                                (z (coerce z 'double-float)))))
+  (x 0d0 :type double-float)
+  (y 0d0 :type double-float)
+  (z 0d0 :type double-float))
+
+(declaim (ftype (function (vec) (double-float 0d0)) vec-squared-length)
+         (inline vec-squared-length))
+(defun vec-squared-length (v)
+  (let ((x (vec-x v))
+        (y (vec-y v))
+        (z (vec-z v)))
+    (+ (* x x) (* y y) (* z z))))
 
 (defun cross (a b)
   "Cross product of two vectors"
@@ -44,6 +53,7 @@
             (- (* (vec-z a) (vec-x b)) (* (vec-x a) (vec-z b)))
             (- (* (vec-x a) (vec-y b)) (* (vec-y a) (vec-x b)))))
 
+(declaim (inline dot))
 (defun dot (a b)
   "Dot product of two vectors"
   (+ (* (vec-x a) (vec-x b))
@@ -79,10 +89,12 @@
       (vec- (scaled-vec (vec- uv (scaled-vec n dt)) ni/nt)
             (scaled-vec n (sqrt discriminant))))))
 
+(declaim (ftype (function (vec double-float) vec) scaled-vec))
 (defun scaled-vec (v n)
   "Returns a new VEC corresponding to V scaled by N"
-  (with-slots (x y z) v
-    (make-vec (* x n) (* y n) (* z n))))
+  (make-vec (* (vec-x v) n)
+            (* (vec-y v) n)
+            (* (vec-z v) n)))
 
 (defun vec+ (&rest vs)
   "Returns a new VEC representing the sum of VS"
@@ -108,18 +120,20 @@
 
 (defun unit-vec (v)
   "Returns a new VEC representing V scaled to a unit length"
-  (with-slots (x y z) v
-    (let ((l (vec-length v)))
-      (make-vec (/ x l) (/ y l) (/ z l)))))
+  (let ((l (vec-length v)))
+    (make-vec (/ (vec-x v) l)
+              (/ (vec-y v) l)
+              (/ (vec-z v) l))))
 
+(declaim (ftype (function (vec) (values double-float &optional)) vec-length))
 (defun vec-length (v)
   (sqrt (vec-squared-length v)))
 
-(defun vec-squared-length (v)
-  (with-slots (x y z) v
-    (+ (* x x) (* y y) (* z z))))
-
-(defstruct (point (:constructor make-point (x y z)) (:include vec)))
+(defstruct (point (:constructor make-point (x y z &aux
+                                                    (x (coerce x 'double-float))
+                                                    (y (coerce y 'double-float))
+                                                    (z (coerce z 'double-float))))
+                  (:include vec)))
 
 (defun offset-point (p v)
   "Returns a new POINT offset from P by V"
@@ -127,6 +141,7 @@
               (+ (point-y p) (vec-y v))
               (+ (point-z p) (vec-z v))))
 
+(declaim (inline point-difference))
 (defun point-difference (a b)
   "Returns the vector representing A - B"
   (make-vec (- (point-x a) (point-x b))
@@ -137,14 +152,9 @@
   (origin (make-point 0 0 0) :type point)
   (direction (make-vec 0 0 0) :type vec))
 
-(defun point-at-parameter (r n)
-  "The point at time T along R"
-  (with-slots (origin direction) r
-    (offset-point origin (scaled-vec direction n))))
-
-(defstruct sphere
+(defstruct (sphere (:constructor make-sphere (&key centre radius material &aux (radius (coerce radius 'double-float)))))
   (centre (make-point 0 0 0) :type point)
-  (radius 0 :type real)
+  (radius 0d0 :type double-float)
   material)
 
 (defstruct hit-record
@@ -156,34 +166,42 @@
 (defgeneric hit-test (ray object n-min &optional n-max)
   (:documentation "Tests OBJECT for a hit from RAY between N-MIN and N-MAX, returning a hit-record."))
 
-(defmethod hit-test (ray (sphere sphere) n-min &optional n-max)
-  (with-slots (centre radius material) sphere
-    (let* ((oc (point-difference (ray-origin ray) centre))
-           (a (dot (ray-direction ray) (ray-direction ray)))
-           (b (dot oc (ray-direction ray)))
-           (c (- (dot oc oc) (* radius radius)))
-           (discriminant (- (* b b) (* a c))))
-      (when (> discriminant 0)
-        (flet ((root-in-bounds (root)
+(defun hit-test-sphere (ray sphere n-min n-max)
+  (let* ((oc (point-difference (ray-origin ray) (sphere-centre sphere)))
+         (a (dot (ray-direction ray) (ray-direction ray)))
+         (b (dot oc (ray-direction ray)))
+         (c (- (dot oc oc) (* (sphere-radius sphere) (sphere-radius sphere))))
+         (discriminant (- (* b b) (* a c))))
+    (when (> discriminant 0)
+      (labels ((root-in-bounds (root)
                  (if (null n-max)
-                     (< n-min root)
-                     (< n-min root n-max)))
+                     (< (the double-float n-min) root)
+                     (< (the double-float n-min) root (the double-float n-max))))
+               (point-at-parameter (r n)
+                 (offset-point (ray-origin r) (scaled-vec (ray-direction r) n)))
                (hit-record-for-root (root)
                  (let* ((hit-point (point-at-parameter ray root))
-                        (normal (unit-vec (scaled-vec (point-difference hit-point centre) radius))))
-                   (make-hit-record :n root :point hit-point :normal normal :material material))))
-          (let ((temp1 (/ (- (- b) (sqrt discriminant)) a))
-                (temp2 (/ (+ (- b) (sqrt discriminant)) a)))
-            (cond
-              ((root-in-bounds temp1) (hit-record-for-root temp1))
-              ((root-in-bounds temp2) (hit-record-for-root temp2)))))))))
+                        (normal (unit-vec (scaled-vec (point-difference hit-point (sphere-centre sphere)) (sphere-radius sphere)))))
+                   (make-hit-record :n root :point hit-point :normal normal :material (sphere-material sphere)))))
+        (let ((root (/ (- (- b) (sqrt discriminant)) a)))
+          (if (root-in-bounds root)
+              (hit-record-for-root root)
+              (progn
+                (setf root (/ (+ (- b) (sqrt discriminant)) a))
+                (when (root-in-bounds root) (hit-record-for-root root)))))))))
 
-(defmethod hit-test (ray (objects sequence) n-min &optional n-max)
+(defmethod hit-test (ray (sphere sphere) n-min &optional n-max)
+  (hit-test-sphere ray sphere n-min n-max))
+
+(defun hit-test-seq (ray objects n-min n-max)
   (let (closest)
     (dotimes (i (length objects) closest)
       (let ((hit (hit-test ray (elt objects i) n-min (if closest (hit-record-n closest) n-max))))
         (when hit
           (setf closest hit))))))
+
+(defmethod hit-test (ray (objects sequence) n-min &optional n-max)
+  (hit-test-seq ray objects n-min n-max))
 
 (defstruct (camera (:constructor nil))
   (lower-left-corner (make-point 0 0 0) :type point)
@@ -192,7 +210,7 @@
   (origin (make-point 0 0 0) :type point)
   (u (make-vec 0 0 0) :type vec)
   (v (make-vec 0 0 0) :type vec)
-  (lens-radius 0 :type real))
+  (lens-radius 0d0 :type double-float))
 
 (defun make-camera (&key from at (up (make-vec 0 1 0)) vertical-fov aspect-ratio lens-radius focus-distance)
   "A camera with the specified vertical field of view (in degrees) and aspect ratio"
@@ -213,20 +231,19 @@
             origin from
             (slot-value camera 'u) u
             (slot-value camera 'v) v
-            (slot-value camera 'lens-radius) lens-radius))
+            (slot-value camera 'lens-radius) (coerce lens-radius 'double-float)))
     camera))
 
 (defun get-ray (camera s t*)
-  (with-slots (lower-left-corner horizontal vertical origin lens-radius u v) camera
-    (let* ((untransformed-offset (scaled-vec (random-in-unit-disc) lens-radius))
-           (offset (vec+ (scaled-vec u (vec-x untransformed-offset))
-                         (scaled-vec v (vec-y untransformed-offset)))))
-      (make-ray :origin (offset-point origin offset)
-                :direction (vec+ lower-left-corner
-                                 (scaled-vec horizontal s)
-                                 (scaled-vec vertical t*)
-                                 (point-difference (make-point 0 0 0) origin)
-                                 (vec- offset))))))
+  (let* ((untransformed-offset (scaled-vec (random-in-unit-disc) (camera-lens-radius camera)))
+         (offset (vec+ (scaled-vec (camera-u camera) (vec-x untransformed-offset))
+                       (scaled-vec (camera-v camera) (vec-y untransformed-offset)))))
+    (make-ray :origin (offset-point (camera-origin camera) offset)
+              :direction (vec+ (camera-lower-left-corner camera)
+                               (scaled-vec (camera-horizontal camera) s)
+                               (scaled-vec (camera-vertical camera) t*)
+                               (point-difference (make-point 0 0 0) (camera-origin camera))
+                               (vec- offset)))))
 
 (defstruct scatter-record
   (attenuation (make-colour 0 0 0) :type colour)
@@ -246,9 +263,9 @@
                          :scatter-ray (make-ray :origin hit-point
                                                 :direction (point-difference target hit-point)))))
 
-(defstruct metal
+(defstruct (metal (:constructor make-metal (&key albedo fuzz &aux (fuzz (coerce fuzz 'double-float)))))
   (albedo (make-colour 0 0 0) :type colour)
-  (fuzz 0 :type (real 0 1)))
+  (fuzz 0d0 :type (double-float 0d0 1d0)))
 
 (defmethod scatter* ((material metal) ray-in hit-point hit-normal)
   (let* ((reflected (reflect (unit-vec (ray-direction ray-in)) hit-normal))
@@ -260,7 +277,10 @@
       (make-scatter-record :attenuation (metal-albedo material)
                            :scatter-ray scattered))))
 
-(defstruct dielectric (refractive-index 0 :type real))
+(defstruct (dielectric (:constructor
+                           make-dielectric (&key refractive-index &aux
+                                                                    (refractive-index (coerce refractive-index 'double-float)))))
+  (refractive-index 0 :type double-float))
 
 (defun schlick (cosine ref-idx)
   (let ((r0 (/ (- 1 ref-idx) (+ 1 ref-idx))))
@@ -294,7 +314,7 @@
   (flet ((lerp (start end n)
            "Linear interpolation of N between START and END"
            (+ (* (- 1 n) start) (* n end))))
-    (let ((hit (hit-test r world 0.001 nil)))
+    (let ((hit (hit-test r world 0.001d0 nil)))
       (if hit
           (let ((scatter (scatter r hit)))
             (if (and (< depth *ray-recursion-depth-limit*) scatter)
@@ -383,8 +403,8 @@
       (loop for i below nx do
         (let (samples)
           (dotimes (s *antialiasing-sample-count*)
-            (let* ((u (/ (+ i (random 1.0)) nx))
-                   (v (/ (+ j (random 1.0)) ny))
+            (let* ((u (/ (+ i (random 1d0)) nx))
+                   (v (/ (+ j (random 1d0)) ny))
                    (r (get-ray camera u v)))
               (push (ray-colour r *scene* 0) samples)))
           (setf (aref a j i) (apply #'blend-colours samples)))))
