@@ -4,3 +4,4 @@
 raytracer
 out.ppm
 rrt/target
+*.fasl
