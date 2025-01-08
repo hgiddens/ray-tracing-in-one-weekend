@@ -9,6 +9,6 @@ class supersampler final {
     double b;
 public:
     supersampler();
-    void add_sample(colour const& colour);
+    void add_sample(colour colour);
     colour value() const;
 };

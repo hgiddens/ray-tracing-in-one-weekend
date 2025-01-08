@@ -7,10 +7,10 @@
 class material;
 
 struct hit_record {
-    double const t;
-    vec3 const p;
-    vec3 const normal;
-    material const& material;
+    double t;
+    vec3 p;
+    vec3 normal;
+    material const* material;
 };
 
 class object {

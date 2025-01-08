@@ -10,9 +10,9 @@ public:
     double blue() const { return elements[2]; }
 
     colour gamma2() const;
+
+    friend colour operator+(colour a, colour b);
+    friend colour operator*(colour c, double d);
+    friend colour operator*(double d, colour c);
 };
 
-colour operator+(colour const& a, colour const& b);
-
-colour operator*(colour const& c, double d);
-colour operator*(double d, colour const& c);

@@ -2,10 +2,10 @@
 
 #include "vec3.hpp"
 
-class ray {
-    vec3 const a, b;
+class ray final {
+    vec3 a, b;
 public:
-    ray(vec3 const& origin, vec3 const& direction);
+    ray(vec3 origin, vec3 direction);
 
     vec3 origin() const { return a; }
     vec3 direction() const { return b; }

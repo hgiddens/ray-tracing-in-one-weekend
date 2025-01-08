@@ -15,7 +15,7 @@ namespace {
 
 vec3 camera::random_in_unit_disk() const {
     while (true) {
-        vec3 const p = vec3{dist(mt), dist(mt), 0};
+        vec3 p = vec3{dist(mt), dist(mt), 0};
         if (p.dot(p) < 1) return p;
     }
 }

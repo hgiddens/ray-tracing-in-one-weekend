@@ -13,7 +13,7 @@ vec3 vec3::operator-() const {
     return {-x(), -y(), -z()};
 }
 
-vec3 vec3::cross(vec3 const& that) const {
+vec3 vec3::cross(vec3 const that) const {
     return {
         y() * that.z() - z() * that.y(),
         -(x() * that.z() - z() * that.x()),
@@ -21,7 +21,7 @@ vec3 vec3::cross(vec3 const& that) const {
     };
 }
 
-double vec3::dot(vec3 const& that) const {
+double vec3::dot(vec3 const that) const {
     return x() * that.x() + y() * that.y() + z() * that.z();
 }
 
@@ -37,23 +37,38 @@ vec3 vec3::unit_vector() const {
     return *this / length();
 }
 
-vec3 operator+(vec3 const& a, vec3 const& b) {
-    return { a.x() + b.x(), a.y() + b.y(), a.z() + b.z() };
+vec3 operator+(vec3 a, vec3 const b) {
+    a.elements[0] += b.x();
+    a.elements[1] += b.y();
+    a.elements[2] += b.z();
+    return a;
 }
 
-vec3 operator-(vec3 const& a, vec3 const& b) {
-    return { a.x() - b.x(), a.y() - b.y(), a.z() - b.z() };
+vec3 operator-(vec3 a, vec3 const b) {
+    a.elements[0] -= b.x();
+    a.elements[1] -= b.y();
+    a.elements[2] -= b.z();
+    return a;
 }
 
-vec3 operator*(vec3 const& v, double const d) {
-    return { v.x() * d, v.y() * d, v.z() * d };
+vec3 operator*(vec3 v, double const d) {
+    v.elements[0] *= d;
+    v.elements[1] *= d;
+    v.elements[2] *= d;
+    return v;
 }
 
-vec3 operator*(double const d, vec3 const& v) {
-    return v * d;
+vec3 operator*(double const d, vec3 v) {
+    v.elements[0] *= d;
+    v.elements[1] *= d;
+    v.elements[2] *= d;
+    return v;
 }
 
-vec3 operator/(vec3 const& v, double d) {
+vec3 operator/(vec3 v, double d) {
     assert(d != 0);
-    return { v.x() / d, v.y() / d, v.z() / d };
+    v.elements[0] /= d;
+    v.elements[1] /= d;
+    v.elements[2] /= d;
+    return v;
 }

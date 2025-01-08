@@ -7,13 +7,13 @@
 class camera final {
     static std::uniform_real_distribution<double> dist;
 
-    vec3 const origin;
-    vec3 const w;
-    vec3 const u;
-    vec3 const v;
-    vec3 const lower_left_corner;
-    vec3 const horizontal;
-    vec3 const vertical;
+    vec3 origin;
+    vec3 w;
+    vec3 u;
+    vec3 v;
+    vec3 lower_left_corner;
+    vec3 horizontal;
+    vec3 vertical;
     double lens_radius;
 
     std::mt19937& mt;

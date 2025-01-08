@@ -20,16 +20,27 @@ colour colour::gamma2() const {
     return { std::sqrt(red()), std::sqrt(green()), std::sqrt(blue()) };
 }
 
-colour operator+(colour const& a, colour const& b) {
-    return { a.red() + b.red(), a.green() + b.green(), a.blue() + b.blue() };
+colour operator+(colour a, colour const b) {
+    a.elements[0] += b.red();
+    a.elements[1] += b.green();
+    a.elements[2] += b.blue();
+    return a;
 }
 
-colour operator*(colour const& c, double d) {
+colour operator*(colour c, double const d) {
     assert(d >= 0);
     assert(d <= 1);
-    return { c.red() * d, c.green() * d, c.blue() * d };
+    c.elements[0] *= d;
+    c.elements[1] *= d;
+    c.elements[2] *= d;
+    return c;
 }
 
-colour operator*(double d, colour const& c) {
-    return c * d;
+colour operator*(double const d, colour c) {
+    assert(d >= 0);
+    assert(d <= 1);
+    c.elements[0] *= d;
+    c.elements[1] *= d;
+    c.elements[2] *= d;
+    return c;
 }

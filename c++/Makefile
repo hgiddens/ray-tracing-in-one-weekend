@@ -1,4 +1,4 @@
-CXXFLAGS=-std=c++17 -O3 -D_GLIBCXX_DEBUG -Wall -Wextra
+CXXFLAGS=-std=c++20 -O3 -D_GLIBCXX_DEBUG -Wall -Wextra -DNDEBUG
 LIBS=
 
 .PHONY: clean run

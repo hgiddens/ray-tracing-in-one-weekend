@@ -25,9 +25,9 @@ namespace {
 
     colour ray_colour(ray const& r, object const& world, int const depth) {
         auto const result = world.hit(r, time_epsilon, std::numeric_limits<double>::max());
-        if (result) {
-            std::optional<scatter_record> scatter = result->material.scatter(r, *result);
-            if (depth < 50 && scatter) {
+        if (result.has_value()) {
+            std::optional<scatter_record> scatter = result->material->scatter(r, *result);
+            if (depth < 50 && scatter.has_value()) {
                 auto const next = ray_colour(scatter->scattered, world, depth + 1);
                 return {
                     next.red() * scatter->attenuation.x(),
@@ -46,11 +46,12 @@ namespace {
     }
 
     object_list build_world(std::mt19937& mt) {
-        std::vector<std::unique_ptr<object>> objects;
-        objects.emplace_back(new sphere{{0, -1000, -1}, 1000, std::make_unique<lambertian>(mt, vec3{0.5, 0.5, 0.5})});
-        objects.emplace_back(new sphere{{0, 1, 0}, 1, std::make_unique<dielectric>(mt, 1.5)});
-        objects.emplace_back(new sphere{{-4, 1, 0}, 1, std::make_unique<lambertian>(mt, vec3{0.4, 0.2, 0.1})});
-        objects.emplace_back(new sphere{{4, 1, 0}, 1, std::make_unique<metal>(mt, vec3{0.7, 0.6, 0.5}, 0)});
+        std::vector<std::unique_ptr<object const>> objects;
+        objects.reserve(500);  // 488-ish
+        objects.push_back(std::make_unique<sphere const>(vec3{0, -1000, -1}, 1000, std::make_unique<lambertian const>(mt, vec3{0.5, 0.5, 0.5})));
+        objects.push_back(std::make_unique<sphere const>(vec3{0, 1, 0}, 1, std::make_unique<dielectric>(mt, 1.5)));
+        objects.push_back(std::make_unique<sphere const>(vec3{-4, 1, 0}, 1, std::make_unique<lambertian>(mt, vec3{0.4, 0.2, 0.1})));
+        objects.push_back(std::make_unique<sphere const>(vec3{4, 1, 0}, 1, std::make_unique<metal>(mt, vec3{0.7, 0.6, 0.5}, 0)));
 
         std::uniform_real_distribution<double> dist{0, 1};
         for (int a = -11; a < 11; ++a) {
@@ -69,7 +70,7 @@ namespace {
                 } else {
                     material = std::make_unique<const dielectric>(mt, 1.5);
                 }
-                objects.emplace_back(new sphere{centre, 0.2, std::move(material)});
+                objects.push_back(std::make_unique<sphere const>(centre, 0.2, std::move(material)));
             }
         }
         
@@ -85,8 +86,6 @@ namespace {
 int main() {
     int const nx = 200, ny = 100, ns = 10;
 
-    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
-
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> dist{0, 1};
@@ -98,6 +97,9 @@ int main() {
         dist_to_focus = (from - at).length(),
         aperture = 0.2;
     camera camera{mt, from, at, vec3{0, 1, 0}, 13, double(nx) / double(ny), aperture, dist_to_focus};
+
+    std::vector<colour> buffer;
+    buffer.reserve(nx * ny);
     
     for (int j = ny - 1; j >= 0; --j) {
         for (int i = 0; i < nx; ++i) {
@@ -111,11 +113,15 @@ int main() {
                 ray const ray = camera.get_ray(u, v);
                 supersampler.add_sample(ray_colour(ray, world, 0));
             }
-            
-            colour const colour = supersampler.value().gamma2();
-            std::cout << convert(colour.red()) << " "
-                      << convert(colour.green()) << " "
-                      << convert(colour.blue()) << "\n";
+
+            buffer.push_back(supersampler.value().gamma2());
         }
+    }
+
+    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    for (colour const& colour : buffer) {
+        std::cout << convert(colour.red()) << " "
+                  << convert(colour.green()) << " "
+                  << convert(colour.blue()) << "\n";
     }
 }

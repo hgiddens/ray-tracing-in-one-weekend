@@ -2,7 +2,7 @@
 
 supersampler::supersampler() : count(0), r(0), g(0), b(0) {}
 
-void supersampler::add_sample(colour const& colour) {
+void supersampler::add_sample(colour const colour) {
     ++count;
     r += colour.red();
     g += colour.green();
