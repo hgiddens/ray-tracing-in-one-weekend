@@ -6,4 +6,5 @@
   :license "MIT"
   :version "0.0.1"
   :components ((:file "package")
-               (:file "onna")))
+               (:file "onna"))
+  :depends-on (:random-state))

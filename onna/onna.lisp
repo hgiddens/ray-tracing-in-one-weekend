@@ -3,6 +3,10 @@
 (declaim (optimize (speed 0) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
 ;; (declaim (optimize (speed 3) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
 
+(defun linear-interpolation (start end n)
+  "Linear interpolation of N between START and END"
+  (+ (* (- 1 n) start) (* n end)))
+
 (defstruct (colour (:constructor make-colour (r g b)))
   (r 0 :type (real 0 1))
   (g 0 :type (real 0 1))
@@ -150,10 +154,33 @@
 
 (defstruct ray
   (origin (make-point 0 0 0) :type point)
-  (direction (make-vec 0 0 0) :type vec))
+  (direction (make-vec 0 0 0) :type vec)
+  (time 0d0 :type double-float))
 
-(defstruct (sphere (:constructor make-sphere (&key centre radius material &aux (radius (coerce radius 'double-float)))))
-  (centre (make-point 0 0 0) :type point)
+(defstruct (sphere (:constructor
+                       make-sphere (&key
+                                      centre
+                                      radius
+                                      material
+                                    &aux
+                                      (radius (coerce radius 'double-float))
+                                      (from-centre centre)))
+                   (:constructor
+                       make-moving-sphere (&key
+                                             from
+                                             to
+                                             radius
+                                             material
+                                           &aux
+                                             (from-time (coerce (car from) 'double-float))
+                                             (from-centre (cdr from))
+                                             (to-time (coerce (car to) 'double-float))
+                                             (to-centre (cdr to))
+                                             (radius (coerce radius 'double-float)))))
+  (from-time 0d0 :type double-float)
+  (from-centre (make-point 0 0 0) :type point)
+  (to-time 0d0 :type double-float)
+  (to-centre nil :type (or point null))
   (radius 0d0 :type double-float)
   material)
 
@@ -167,7 +194,13 @@
   (:documentation "Tests OBJECT for a hit from RAY between N-MIN and N-MAX, returning a hit-record."))
 
 (defun hit-test-sphere (ray sphere n-min n-max)
-  (let* ((oc (point-difference (ray-origin ray) (sphere-centre sphere)))
+  (let* ((sphere-centre (if (null (sphere-to-centre sphere))
+                            (sphere-from-centre sphere)
+                            (let ((scaled-time (/ (- (ray-time ray) (sphere-from-time sphere))
+                                                  (- (sphere-to-time sphere) (sphere-from-time sphere))))
+                                  (centre-vec (point-difference (sphere-to-centre sphere) (sphere-from-centre sphere))))
+                              (offset-point (sphere-from-centre sphere) (scaled-vec centre-vec scaled-time)))))
+         (oc (point-difference (ray-origin ray) sphere-centre))
          (a (dot (ray-direction ray) (ray-direction ray)))
          (b (dot oc (ray-direction ray)))
          (c (- (dot oc oc) (* (sphere-radius sphere) (sphere-radius sphere))))
@@ -181,7 +214,7 @@
                  (offset-point (ray-origin r) (scaled-vec (ray-direction r) n)))
                (hit-record-for-root (root)
                  (let* ((hit-point (point-at-parameter ray root))
-                        (normal (unit-vec (scaled-vec (point-difference hit-point (sphere-centre sphere)) (sphere-radius sphere)))))
+                        (normal (unit-vec (scaled-vec (point-difference hit-point sphere-centre) (sphere-radius sphere)))))
                    (make-hit-record :n root :point hit-point :normal normal :material (sphere-material sphere)))))
         (let ((root (/ (- (- b) (sqrt discriminant)) a)))
           (if (root-in-bounds root)
@@ -210,9 +243,11 @@
   (origin (make-point 0 0 0) :type point)
   (u (make-vec 0 0 0) :type vec)
   (v (make-vec 0 0 0) :type vec)
-  (lens-radius 0d0 :type double-float))
+  (lens-radius 0d0 :type double-float)
+  (t0 0d0 :type double-float)
+  (t1 0d0 :type double-float))
 
-(defun make-camera (&key from at (up (make-vec 0 1 0)) vertical-fov aspect-ratio lens-radius focus-distance)
+(defun make-camera (&key from at (up (make-vec 0 1 0)) vertical-fov aspect-ratio lens-radius focus-distance t0 t1)
   "A camera with the specified vertical field of view (in degrees) and aspect ratio"
   (let* ((theta (/ (* vertical-fov pi) 180))
          (height/2 (tan (/ theta 2)))
@@ -221,6 +256,7 @@
          (w (unit-vec (point-difference from at)))
          (u (unit-vec (cross up w)))
          (v (cross w u)))
+    (setf focus-distance (coerce focus-distance 'double-float))
     (with-slots (lower-left-corner horizontal vertical origin) camera
       (setf lower-left-corner (vec- from
                                     (scaled-vec u (* width/2 focus-distance))
@@ -231,7 +267,9 @@
             origin from
             (slot-value camera 'u) u
             (slot-value camera 'v) v
-            (slot-value camera 'lens-radius) (coerce lens-radius 'double-float)))
+            (slot-value camera 'lens-radius) (coerce lens-radius 'double-float)
+            (camera-t0 camera) (coerce t0 'double-float)
+            (camera-t1 camera) (coerce t1 'double-float)))
     camera))
 
 (defun get-ray (camera s t*)
@@ -243,7 +281,8 @@
                                (scaled-vec (camera-horizontal camera) s)
                                (scaled-vec (camera-vertical camera) t*)
                                (point-difference (make-point 0 0 0) (camera-origin camera))
-                               (vec- offset)))))
+                               (vec- offset))
+              :time (linear-interpolation (camera-t0 camera) (camera-t1 camera) (random 1d0)))))
 
 (defstruct scatter-record
   (attenuation (make-colour 0 0 0) :type colour)
@@ -261,7 +300,8 @@
   (let ((target (offset-point hit-point (vec+ hit-normal (random-in-unit-sphere)))))
     (make-scatter-record :attenuation (lambertian-albedo material)
                          :scatter-ray (make-ray :origin hit-point
-                                                :direction (point-difference target hit-point)))))
+                                                :direction (point-difference target hit-point)
+                                                :time (ray-time ray-in)))))
 
 (defstruct (metal (:constructor make-metal (&key albedo fuzz &aux (fuzz (coerce fuzz 'double-float)))))
   (albedo (make-colour 0 0 0) :type colour)
@@ -272,7 +312,8 @@
          (scattered (make-ray :origin hit-point
                               :direction (vec+ reflected
                                                (scaled-vec (random-in-unit-sphere)
-                                                           (metal-fuzz material))))))
+                                                           (metal-fuzz material)))
+                              :time (ray-time ray-in))))
     (when (> (dot reflected hit-normal) 0)
       (make-scatter-record :attenuation (metal-albedo material)
                            :scatter-ray scattered))))
@@ -306,24 +347,22 @@
                                     refracted)))
         (make-scatter-record :attenuation attenuation
                              :scatter-ray (make-ray :origin hit-point
-                                                    :direction scatter-direction))))))
+                                                    :direction scatter-direction
+                                                    :time (ray-time ray-in)))))))
 
 (defparameter *ray-recursion-depth-limit* 50)
 
 (defun ray-colour (r world depth)
-  (flet ((lerp (start end n)
-           "Linear interpolation of N between START and END"
-           (+ (* (- 1 n) start) (* n end))))
-    (let ((hit (hit-test r world 0.001d0 nil)))
-      (if hit
-          (let ((scatter (scatter r hit)))
-            (if (and (< depth *ray-recursion-depth-limit*) scatter)
-                (attenuate (scatter-record-attenuation scatter)
-                           (ray-colour (scatter-record-scatter-ray scatter) world (1+ depth)))
-                (make-colour 0 0 0)))
-          (let* ((unit-direction (unit-vec (ray-direction r)))
-                 (n (* 0.5 (1+ (vec-y unit-direction)))))
-            (make-colour (lerp 1 0.5 n) (lerp 1 0.7 n) 1))))))
+  (let ((hit (hit-test r world 0.001d0 nil)))
+    (if hit
+        (let ((scatter (scatter r hit)))
+          (if (and (< depth *ray-recursion-depth-limit*) scatter)
+              (attenuate (scatter-record-attenuation scatter)
+                         (ray-colour (scatter-record-scatter-ray scatter) world (1+ depth)))
+              (make-colour 0 0 0)))
+        (let* ((unit-direction (unit-vec (ray-direction r)))
+               (n (* 0.5 (1+ (vec-y unit-direction)))))
+          (make-colour (linear-interpolation 1 0.5 n) (linear-interpolation 1 0.7 n) 1)))))
 
 (defparameter *antialiasing-sample-count* 100)
 
@@ -367,38 +406,47 @@
                        :material (make-metal :albedo (make-colour 0.7 0.6 0.5) :fuzz 0))
           list)
 
-    (flet ((choose-material ()
+    (flet ((random-sphere (centre radius)
              (let ((m (random 1.0)))
                (cond
                  ((< m 0.8)
-                  (make-lambertian :albedo (make-colour (* (random 1.0) (random 1.0))
-                                                        (* (random 1.0) (random 1.0))
-                                                        (* (random 1.0) (random 1.0)))))
+                  (make-moving-sphere :from (cons 0 centre)
+                                      :to (cons 1 (offset-point centre (make-vec 0 (random 0.5d0) 0)))
+                                      :radius radius
+                                      :material (make-lambertian :albedo (make-colour (* (random 1.0) (random 1.0))
+                                                                                      (* (random 1.0) (random 1.0))
+                                                                                      (* (random 1.0) (random 1.0))))))
                  ((< m 0.95)
-                  (make-metal :albedo (make-colour (* 0.5 (1+ (random 1.0)))
-                                                   (* 0.5 (1+ (random 1.0)))
-                                                   (* 0.5 (1+ (random 1.0))))
-                              :fuzz (random 0.5)))
+                  (make-sphere :centre centre
+                               :radius radius
+                               :material (make-metal :albedo (make-colour (* 0.5 (1+ (random 1.0)))
+                                                                          (* 0.5 (1+ (random 1.0)))
+                                                                          (* 0.5 (1+ (random 1.0))))
+                                                     :fuzz (random 0.5))))
                  (t
-                  (make-dielectric :refractive-index 1.5))))))
+                  (make-sphere :centre centre
+                               :radius radius
+                               :material (make-dielectric :refractive-index 1.5)))))))
       (loop for a from -11 below 11 do
         (loop for b from -11 below 11
               as centre = (make-point (+ a (random 0.9)) small-radius (+ b (random 0.9)))
               when (> (vec-length (point-difference centre clear-centre)) clear-radius)
-                do (push (make-sphere :centre centre :radius small-radius :material (choose-material)) list))))
+                do (push (random-sphere centre small-radius) list))))
 
     (coerce list 'vector)))
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
-        (camera (let ((from (make-point 15 2 3))
-                      (at (make-point -2 0.2 -1)))
+        (camera (let ((from (make-point 13 2 3))
+                      (at (make-point 0 0 0)))
                   (make-camera :from from
                                :at at
-                               :vertical-fov 13
+                               :vertical-fov 20
                                :aspect-ratio (/ nx ny)
-                               :lens-radius 0.1
-                               :focus-distance (vec-length (point-difference from at))))))
+                               :lens-radius 0
+                               :focus-distance 10
+                               :t0 0
+                               :t1 1))))
     (loop for j below ny do
       (loop for i below nx do
         (let (samples)
