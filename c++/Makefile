@@ -1,5 +1,5 @@
-CXXFLAGS=-std=c++17 -D_GLIBCXX_DEBUG -Wall -Wextra $(shell pkg-config --cflags UnitTest++)
-LIBS=$(shell pkg-config --libs UnitTest++)
+CXXFLAGS=-std=c++17 -O3 -D_GLIBCXX_DEBUG -Wall -Wextra
+LIBS=
 
 .PHONY: clean run
 

@@ -23,12 +23,12 @@ namespace {
         return int(255.99*f);
     }
 
-    colour ray_colour(std::mt19937& mt, ray const& r, object const& world, int const depth) {
+    colour ray_colour(ray const& r, object const& world, int const depth) {
         auto const result = world.hit(r, time_epsilon, std::numeric_limits<double>::max());
         if (result) {
             std::optional<scatter_record> scatter = result->material.scatter(r, *result);
             if (depth < 50 && scatter) {
-                auto const next = ray_colour(mt, scatter->scattered, world, depth + 1);
+                auto const next = ray_colour(scatter->scattered, world, depth + 1);
                 return {
                     next.red() * scatter->attenuation.x(),
                     next.green() * scatter->attenuation.y(),
@@ -47,15 +47,33 @@ namespace {
 
     object_list build_world(std::mt19937& mt) {
         std::vector<std::unique_ptr<object>> objects;
-        objects.emplace_back(new sphere{{0, 0, -1}, 0.5, std::make_unique<lambertian>(mt, vec3{0.1, 0.2, 0.5})});
+        objects.emplace_back(new sphere{{0, -1000, -1}, 1000, std::make_unique<lambertian>(mt, vec3{0.5, 0.5, 0.5})});
+        objects.emplace_back(new sphere{{0, 1, 0}, 1, std::make_unique<dielectric>(mt, 1.5)});
+        objects.emplace_back(new sphere{{-4, 1, 0}, 1, std::make_unique<lambertian>(mt, vec3{0.4, 0.2, 0.1})});
+        objects.emplace_back(new sphere{{4, 1, 0}, 1, std::make_unique<metal>(mt, vec3{0.7, 0.6, 0.5}, 0)});
 
-        objects.emplace_back(new sphere{{0, -100.5, -1}, 100, std::make_unique<lambertian>(mt, vec3{0.8, 0.8, 0})});
+        std::uniform_real_distribution<double> dist{0, 1};
+        for (int a = -11; a < 11; ++a) {
+            for (int b = -11; b < 11; ++b) {
+                vec3 const centre{a + 0.9*dist(mt), 0.2, b + 0.9*dist(mt)};
+                if ((centre - vec3{4, 0.2, 0}).length() <= 0.9) {
+                    continue;
+                }
 
-        objects.emplace_back(new sphere{{1, 0, -1}, 0.5, std::make_unique<metal>(mt, vec3{0.8, 0.6, 0.2}, 0.15)});
-
-        objects.emplace_back(new sphere{{-1, 0, -1}, 0.5, std::make_unique<dielectric>(mt, 1.5)});
-        objects.emplace_back(new sphere{{-1, 0, -1}, -0.45, std::make_unique<dielectric>(mt, 1.5)});
-        return std::move(objects);
+                std::unique_ptr<const material> material;
+                double const choose_mat = dist(mt);
+                if (choose_mat < 0.8) {
+                    material = std::make_unique<const lambertian>(mt, vec3{dist(mt) * dist(mt), dist(mt) * dist(mt), dist(mt) * dist(mt)});
+                } else if (choose_mat < 0.95) {
+                    material = std::make_unique<const metal>(mt, vec3{0.5*(1 + dist(mt)), 0.5*(1 + dist(mt)), 0.5*(1 + dist(mt))}, 0.5*dist(mt));
+                } else {
+                    material = std::make_unique<const dielectric>(mt, 1.5);
+                }
+                objects.emplace_back(new sphere{centre, 0.2, std::move(material)});
+            }
+        }
+        
+        return objects;
     }
 }
 
@@ -65,7 +83,7 @@ namespace {
 // into the screen is negative z
 
 int main() {
-    int const nx = 800, ny = 400, ns = 1000;
+    int const nx = 200, ny = 100, ns = 10;
 
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
 
@@ -74,12 +92,12 @@ int main() {
     std::uniform_real_distribution<double> dist{0, 1};
     object const& world = build_world(mt);
     vec3 const
-        from{3, 3, 2},
-        at{0, 0, -1};
+        from{15, 2, 3},
+        at{-2, 0.2, -1};
     double const
         dist_to_focus = (from - at).length(),
-        aperture = 0.25;
-    camera camera{mt, from, at, vec3{0, 1, 0}, 20, double(nx) / double(ny), aperture, dist_to_focus};
+        aperture = 0.2;
+    camera camera{mt, from, at, vec3{0, 1, 0}, 13, double(nx) / double(ny), aperture, dist_to_focus};
     
     for (int j = ny - 1; j >= 0; --j) {
         for (int i = 0; i < nx; ++i) {
@@ -91,7 +109,7 @@ int main() {
                     u = ii / double(nx),
                     v = jj / double(ny);
                 ray const ray = camera.get_ray(u, v);
-                supersampler.add_sample(ray_colour(mt, ray, world, 0));
+                supersampler.add_sample(ray_colour(ray, world, 0));
             }
             
             colour const colour = supersampler.value().gamma2();
