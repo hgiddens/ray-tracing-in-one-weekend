@@ -1,7 +1,8 @@
 (in-package #:onna)
 
 (declaim (optimize (speed 0) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
-;; (declaim (optimize (speed 3) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
+;;(declaim (optimize (speed 3) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
+;; There's also (float-accuracy 1-3) SBCL extension? Hardly documented
 
 (defun linear-interpolation (start end n)
   "Linear interpolation of N between START and END"
@@ -184,6 +185,48 @@
   (radius 0d0 :type double-float)
   material)
 
+(defun sphere-centre-at (sphere time)
+  (if (null (sphere-to-centre sphere))
+      (sphere-from-centre sphere)
+      (let ((scaled-time (/ (- time (sphere-from-time sphere))
+                            (- (sphere-to-time sphere) (sphere-from-time sphere))))
+            (centre-vec (point-difference (sphere-to-centre sphere) (sphere-from-centre sphere))))
+        (offset-point (sphere-from-centre sphere) (scaled-vec centre-vec scaled-time)))))
+
+(defstruct aabb
+  "An axis-aligned bounding box; in each dimension it's assumed that min < max."
+  (min (make-vec 0 0 0) :type vec)
+  (max (make-vec 0 0 0) :type vec))
+
+(defstruct (bvh-node (:constructor empty-bvh-node ()))
+  left  ; hitable
+  right  ; hitable
+  (box (make-aabb) :type aabb))
+
+(defun make-bvh-node (hitables t0 t1)
+  (let* ((n (length hitables))
+         (node (empty-bvh-node)))
+    (assert (> n 0))  ; or just handle in the case?
+    (let ((axis (elt #(x y z) (random 3))))
+      ;; ignoring possibility of null bounding boxes
+      (sort hitables #'< :key (lambda (a) (slot-value (aabb-min (bounding-box a 0 0)) axis))))
+    (case n
+      (1 (setf (bvh-node-left node) (elt hitables 0)
+               (bvh-node-right node) (elt hitables 0)))
+      (2 (setf (bvh-node-left node) (elt hitables 0)
+               (bvh-node-right node) (elt hitables 1)))
+      (otherwise (let* ((split (floor (/ n 2)))
+                        (lh (make-array split :displaced-to hitables))
+                        (gh (make-array (- n split) :displaced-to hitables :displaced-index-offset split)))
+                   (setf (bvh-node-left node) (make-bvh-node lh t0 t1)
+                         (bvh-node-right node) (make-bvh-node gh t0 t1)))))
+    (let ((left-box (bounding-box (bvh-node-left node) t0 t1))
+          (right-box (bounding-box (bvh-node-right node) t0 t1)))
+      (if (or (null left-box) (null right-box))
+          (error "no bounding box in bvh construction")
+          (setf (bvh-node-box node) (surrounding-box left-box right-box))))
+    node))
+
 (defstruct hit-record
   (n 0 :type real)
   (point (make-point 0 0 0) :type point)
@@ -193,13 +236,13 @@
 (defgeneric hit-test (ray object n-min &optional n-max)
   (:documentation "Tests OBJECT for a hit from RAY between N-MIN and N-MAX, returning a hit-record."))
 
+(declaim (ftype (function (ray double-float) point) point-at-parameter)
+         (inline point-at-parameter))
+(defun point-at-parameter (r n)
+  (offset-point (ray-origin r) (scaled-vec (ray-direction r) n)))
+
 (defun hit-test-sphere (ray sphere n-min n-max)
-  (let* ((sphere-centre (if (null (sphere-to-centre sphere))
-                            (sphere-from-centre sphere)
-                            (let ((scaled-time (/ (- (ray-time ray) (sphere-from-time sphere))
-                                                  (- (sphere-to-time sphere) (sphere-from-time sphere))))
-                                  (centre-vec (point-difference (sphere-to-centre sphere) (sphere-from-centre sphere))))
-                              (offset-point (sphere-from-centre sphere) (scaled-vec centre-vec scaled-time)))))
+  (let* ((sphere-centre (sphere-centre-at sphere (ray-time ray)))
          (oc (point-difference (ray-origin ray) sphere-centre))
          (a (dot (ray-direction ray) (ray-direction ray)))
          (b (dot oc (ray-direction ray)))
@@ -210,8 +253,6 @@
                  (if (null n-max)
                      (< (the double-float n-min) root)
                      (< (the double-float n-min) root (the double-float n-max))))
-               (point-at-parameter (r n)
-                 (offset-point (ray-origin r) (scaled-vec (ray-direction r) n)))
                (hit-record-for-root (root)
                  (let* ((hit-point (point-at-parameter ray root))
                         (normal (unit-vec (scaled-vec (point-difference hit-point sphere-centre) (sphere-radius sphere)))))
@@ -235,6 +276,95 @@
 
 (defmethod hit-test (ray (objects sequence) n-min &optional n-max)
   (hit-test-seq ray objects n-min n-max))
+
+;; Not part of the generic function because that returns a hit-record, whereas
+;; here we just return a bool.
+(defun hit-test-aabb (aabb ray t-min t-max)
+  ;; Ignoring for now, but CL seems to have an uneasy relationship with IEEE
+  ;; 754. SBCL has the SB-INT:WITH-FLOAT-TRAPS-MASKED macro which may be
+  ;; helpful here. The interesting values for its argument are :DIVIDE-BY-ZERO
+  ;; to get infinities and :INVALID to allow (quiet) NaNs. There are
+  ;; predicates for each of these in the SB-EXT package. With the traps
+  ;; masked, everything *seems* to behave as one would expect; note that *all*
+  ;; the computation has to happen with traps masked, you can't just generate
+  ;; a NaN and then let it escape. There are however reader literals for
+  ;; infinities, #.DOUBLE-FLOAT-POSITIVE-INFINITY &c.
+  ;;
+  ;; We still need to define and use FFMIN/FFMAX because MIN/MAX behave
+  ;; differently and I'm not sure how much it matters. In the C++ code they're
+  ;; meant to be faster as they don't have to do the special NaN handling? If
+  ;; I get this working it will be interesting to check.
+  ;; XXX: actually check
+  ;; XXX: there's a "faster" method in the book, try that and compare
+  (flet ((ffmin (a b) (if (< a b) a b))
+         (ffmax (a b) (if (> a b) a b)))
+    (loop for slot in '(x y z)
+          as ray-origin = (slot-value (ray-origin ray) slot)
+          as ray-direction = (slot-value (ray-direction ray) slot)
+          as a = (/ (- (slot-value (aabb-min aabb) slot) ray-origin) ray-direction)
+          as b = (/ (- (slot-value (aabb-max aabb) slot) ray-origin) ray-direction)
+          as t0 = (ffmin a b)
+          as t1 = (ffmax a b)
+          do (setf t-min (ffmax t0 t-min)
+                   t-max (if (null t-max) t1 (ffmin t1 t-max)))
+          never (<= t-max t-min))))
+
+(defun hit-test-bvh-node (ray node n-min n-max)
+  (when (hit-test-aabb (bvh-node-box node) ray n-min n-max)
+    (let ((hit-left (hit-test ray (bvh-node-left node) n-min n-max))
+          (hit-right (hit-test ray (bvh-node-right node) n-min n-max)))
+      (cond ((and hit-left hit-right)
+             (if (< (hit-record-n hit-left) (hit-record-n hit-right))
+                 hit-left
+                 hit-right))
+            (hit-left)
+            (hit-right)))))
+
+(defmethod hit-test (ray (node bvh-node) n-min &optional n-max)
+  (hit-test-bvh-node ray node n-min n-max))
+
+(defun surrounding-box (box0 box1)
+  (let ((small (make-vec (min (vec-x (aabb-min box0)) (vec-x (aabb-min box1)))
+                         (min (vec-y (aabb-min box0)) (vec-y (aabb-min box1)))
+                         (min (vec-z (aabb-min box0)) (vec-z (aabb-min box1)))))
+        (big (make-vec (max (vec-x (aabb-min box0)) (vec-x (aabb-min box1)))
+                       (max (vec-y (aabb-min box0)) (vec-y (aabb-min box1)))
+                       (max (vec-z (aabb-min box0)) (vec-z (aabb-min box1))))))
+    (make-aabb :min small :max big)))
+
+(defgeneric bounding-box (object t0 t1)
+  (:documentation "Returns the bounding box of OBJECT between T0 and T1, or nil (for e.g. infinite planes)"))
+
+(defun bounding-box-sphere (sphere t0 t1)
+  (flet ((bounding-box-for-centre (centre)
+           (let* ((radius (sphere-radius sphere))
+                  (rvec (make-vec radius radius radius)))
+             (make-aabb :min (offset-point centre (vec- rvec))
+                        :max (offset-point centre rvec)))))
+    (if (null (sphere-to-centre sphere))
+        (bounding-box-for-centre (sphere-from-centre sphere))
+        (surrounding-box (bounding-box-for-centre (sphere-centre-at sphere t0))
+                         (bounding-box-for-centre (sphere-centre-at sphere t1))))))
+
+(defmethod bounding-box ((sphere sphere) t0 t1)
+  (bounding-box-sphere sphere t0 t1))
+
+(defun bounding-box-seq (objects t0 t1)
+  (when (> (length objects) 0)
+    (flet ((merge-optional-boxes (box0 box1)
+             (if (or (null box0) (null box1))
+                 (return-from bounding-box-seq nil)
+                 (surrounding-box box0 box1)))
+           (bb (o) (bounding-box o t0 t1)))
+      (reduce #'merge-optional-boxes objects :key #'bb))))
+
+(defmethod bounding-box ((objects sequence) t0 t1)
+  (bounding-box-seq objects t0 t1))
+
+(defmethod bounding-box ((node bvh-node) t0 t1)
+  ;; XXX: It is wack that this ignores the time parameters!
+  ;; I mean, fine, it's correct, but yikes.
+  (bvh-node-box node))
 
 (defstruct (camera (:constructor nil))
   (lower-left-corner (make-point 0 0 0) :type point)
@@ -383,7 +513,7 @@
                                            :radius -0.45
                                            :material (make-dielectric :refractive-index 1.5))))
 
-(defun test-scene ()
+(defun test-scene (t0 t1)
   (let* ((small-radius 0.2)
          (big-radius 1)
          (clear-centre (make-point 4 small-radius 0))
@@ -410,8 +540,8 @@
              (let ((m (random 1.0)))
                (cond
                  ((< m 0.8)
-                  (make-moving-sphere :from (cons 0 centre)
-                                      :to (cons 1 (offset-point centre (make-vec 0 (random 0.5d0) 0)))
+                  (make-moving-sphere :from (cons t0 centre)
+                                      :to (cons t1 (offset-point centre (make-vec 0 (random 0.5d0) 0)))
                                       :radius radius
                                       :material (make-lambertian :albedo (make-colour (* (random 1.0) (random 1.0))
                                                                                       (* (random 1.0) (random 1.0))
@@ -433,7 +563,7 @@
               when (> (vec-length (point-difference centre clear-centre)) clear-radius)
                 do (push (random-sphere centre small-radius) list))))
 
-    (coerce list 'vector)))
+    (make-bvh-node (coerce list 'vector) t0 t1)))
 
 (defun test-image (nx ny)
   (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
