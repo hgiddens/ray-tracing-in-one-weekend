@@ -1,7 +1,7 @@
 (in-package #:onna)
 
-(declaim (optimize (speed 0) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
-;; (declaim (optimize (speed 3) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
+;; (declaim (optimize (speed 0) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
+(declaim (optimize (speed 3) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
 
 (defun linear-interpolation (start end n)
   "Linear interpolation of N between START and END"
@@ -43,8 +43,7 @@
   (y 0d0 :type double-float)
   (z 0d0 :type double-float))
 
-(declaim (ftype (function (vec) (double-float 0d0)) vec-squared-length)
-         (inline vec-squared-length))
+(declaim (ftype (function (vec) (double-float 0d0)) vec-squared-length))
 (defun vec-squared-length (v)
   (let ((x (vec-x v))
         (y (vec-y v))
@@ -57,7 +56,6 @@
             (- (* (vec-z a) (vec-x b)) (* (vec-x a) (vec-z b)))
             (- (* (vec-x a) (vec-y b)) (* (vec-y a) (vec-x b)))))
 
-(declaim (inline dot))
 (defun dot (a b)
   "Dot product of two vectors"
   (+ (* (vec-x a) (vec-x b))
@@ -145,7 +143,6 @@
               (+ (point-y p) (vec-y v))
               (+ (point-z p) (vec-z v))))
 
-(declaim (inline point-difference))
 (defun point-difference (a b)
   "Returns the vector representing A - B"
   (make-vec (- (point-x a) (point-x b))
@@ -156,6 +153,82 @@
   (origin (make-point 0 0 0) :type point)
   (direction (make-vec 0 0 0) :type vec)
   (time 0d0 :type double-float))
+
+(defstruct aabb
+  (min (make-point 0 0 0) :type point)
+  (max (make-point 0 0 0) :type point))
+
+(defun surrounding-box (a b)
+  (let ((small (let ((a (aabb-min a))
+                     (b (aabb-min b)))
+                 (make-point (min (point-x a) (point-x b))
+                             (min (point-y a) (point-y b))
+                             (min (point-z a) (point-z b)))))
+        (big (let ((a (aabb-max a))
+                   (b (aabb-max b)))
+               (make-point (max (point-x a) (point-x b))
+                           (max (point-y a) (point-y b))
+                           (max (point-z a) (point-z b))))))
+    (make-aabb :min small :max big)))
+
+(declaim (ftype (function (ray aabb double-float (or double-float null)) boolean) hit-test-aabb))
+(defun hit-test-aabb (ray aabb n-min n-max &aux n-min* n-max*)
+  ;; There's also :invalid to handle (quiet) NaNs, which the book mentions we
+  ;; may encounter at some point. There are also predicates for the "fun"
+  ;; floating-point values in SB-EXT. There are also reader literals e.g.
+  ;; #.DOUBLE-FLOAT-POSITIVE-INFINITY.
+  (sb-int:with-float-traps-masked (:divide-by-zero)
+    ;; Not part of the hit-test generic function because it returns a bool
+    ;; rather than a hit-record. Although it could? There's no requirement that
+    ;; all the methods in a generic function return the same type?
+
+    ;; This can obviously be improved, but at the moment I don't care to do
+    ;; so. Defining a function that takes a slot name as an argument is slow;
+    ;; macros seem pretty much as complicated for this simple use case.
+
+    (let* ((inv-d (/ 1d0 (vec-x (ray-direction ray))))
+           (t0 (* (- (point-x (aabb-min aabb))
+                     (point-x (ray-origin ray)))
+                  inv-d))
+           (t1 (* (- (point-x (aabb-max aabb))
+                     (point-x (ray-origin ray)))
+                  inv-d)))
+      (when (minusp inv-d)
+        (rotatef t0 t1))
+      (setf n-min* (max n-min t0)
+            n-max* (if (or (null n-max) (< t1 n-max)) t1 n-max))
+      (when (<= n-max* n-min*)
+        (return-from hit-test-aabb nil)))
+
+    (let* ((inv-d (/ 1d0 (vec-y (ray-direction ray))))
+           (t0 (* (- (point-y (aabb-min aabb))
+                     (point-y (ray-origin ray)))
+                  inv-d))
+           (t1 (* (- (point-y (aabb-max aabb))
+                     (point-y (ray-origin ray)))
+                  inv-d)))
+      (when (minusp inv-d)
+        (rotatef t0 t1))
+      (setf n-min* (max n-min* t0)
+            n-max* (min t1 n-max*))
+      (when (<= n-max* n-min*)
+        (return-from hit-test-aabb nil)))
+
+    (let* ((inv-d (/ 1d0 (vec-z (ray-direction ray))))
+           (t0 (* (- (point-z (aabb-min aabb))
+                     (point-z (ray-origin ray)))
+                  inv-d))
+           (t1 (* (- (point-z (aabb-max aabb))
+                     (point-z (ray-origin ray)))
+                  inv-d)))
+      (when (minusp inv-d)
+        (rotatef t0 t1))
+      (setf n-min* (max n-min* t0)
+            n-max* (min n-max* t1))
+      (when (<= n-max* n-min*)
+        (return-from hit-test-aabb nil)))
+
+    t))
 
 (defstruct (sphere (:constructor
                        make-sphere (&key
@@ -184,6 +257,58 @@
   (radius 0d0 :type double-float)
   material)
 
+(declaim (ftype (function (sphere double-float) point) sphere-centre-at))
+(defun sphere-centre-at (sphere time)
+  (if (null (sphere-to-centre sphere))
+      (sphere-from-centre sphere)
+      (let ((scaled-time (/ (- time (sphere-from-time sphere))
+                            (- (sphere-to-time sphere) (sphere-from-time sphere))))
+            (centre-vec (point-difference (sphere-to-centre sphere) (sphere-from-centre sphere))))
+        (offset-point (sphere-from-centre sphere) (scaled-vec centre-vec scaled-time)))))
+
+(defstruct (bvh-node (:constructor empty-bvh-node))
+  left right (box nil :type (or aabb null)))
+
+;;; Destructive; I should flag this in some way?
+(defun make-bvh-node (objects time0 time1)
+  (let ((n (length objects))
+        (node (empty-bvh-node))
+        (axis (let ((axes #(x y z)))
+                (elt axes (random (length axes))))))
+    (setf objects (sort objects (lambda (a b)
+                                  ;; Why doesn't this use time0 and time1?
+                                  ;; Just because std::qsort makes it hard?
+                                  ;; Fix.
+                                  (let ((a-box (bounding-box a 0d0 0d0))
+                                        (b-box (bounding-box b 0d0 0d0)))
+                                    (unless (and a-box b-box)
+                                      (error "no bounding box in bvh-node construction"))
+                                    (if (minusp (- (slot-value (aabb-min a-box) axis)
+                                                   (slot-value (aabb-min b-box) axis)))
+                                        -1
+                                        1)))))
+    (case n
+      (0)
+      ;; This seems unfortunate.
+      (1
+       (setf (bvh-node-left node) (elt objects 0)
+             (bvh-node-right node) (elt objects 0)))
+      (2
+       (setf (bvh-node-left node) (elt objects 0)
+             (bvh-node-right node) (elt objects 1)))
+      (otherwise
+       (let ((split (floor (/ n 2))))
+         (setf (bvh-node-left node) (make-bvh-node (subseq objects 0 split) time0 time1)
+               (bvh-node-right node) (make-bvh-node (subseq objects split) time0 time1)))))
+    (let ((box-left (when (bvh-node-left node) (bounding-box (bvh-node-left node) time0 time1)))
+          (box-right (when (bvh-node-right node) (bounding-box (bvh-node-right node) time0 time1))))
+      (unless (and box-left box-right)
+        ;; Is this actually an error? It just means the node has no bounding
+        ;; box, right?
+        (error "no bounding box in bvh-node construction"))
+      (setf (bvh-node-box node) (surrounding-box box-left box-right)))
+    node))
+
 (defstruct hit-record
   (n 0 :type real)
   (point (make-point 0 0 0) :type point)
@@ -194,12 +319,7 @@
   (:documentation "Tests OBJECT for a hit from RAY between N-MIN and N-MAX, returning a hit-record."))
 
 (defun hit-test-sphere (ray sphere n-min n-max)
-  (let* ((sphere-centre (if (null (sphere-to-centre sphere))
-                            (sphere-from-centre sphere)
-                            (let ((scaled-time (/ (- (ray-time ray) (sphere-from-time sphere))
-                                                  (- (sphere-to-time sphere) (sphere-from-time sphere))))
-                                  (centre-vec (point-difference (sphere-to-centre sphere) (sphere-from-centre sphere))))
-                              (offset-point (sphere-from-centre sphere) (scaled-vec centre-vec scaled-time)))))
+  (let* ((sphere-centre (sphere-centre-at sphere (ray-time ray)))
          (oc (point-difference (ray-origin ray) sphere-centre))
          (a (dot (ray-direction ray) (ray-direction ray)))
          (b (dot oc (ray-direction ray)))
@@ -235,6 +355,47 @@
 
 (defmethod hit-test (ray (objects sequence) n-min &optional n-max)
   (hit-test-seq ray objects n-min n-max))
+
+(defun hit-test-node (ray node n-min n-max)
+  (when (let ((box (bvh-node-box node)))
+          (and box (hit-test-aabb ray box n-min n-max)))
+    (flet ((sub-hit (sub) (and sub (hit-test ray sub n-min n-max))))
+      (let ((left-hit (sub-hit (bvh-node-left node)))
+            (right-hit (sub-hit (bvh-node-right node))))
+        (cond
+          ((and left-hit right-hit)
+           (if (< (hit-record-n left-hit) (hit-record-n right-hit)) left-hit right-hit))
+          (left-hit)
+          (right-hit))))))
+
+(defmethod hit-test (ray (node bvh-node) n-min &optional n-max)
+  (hit-test-node ray node n-min n-max))
+
+
+(defgeneric bounding-box (object t0 t1)
+  (:documentation "Returns the axis-aligned bounding box (AABB) of OBJECT between times t0 and t1."))
+
+;;; I don't think we need split the implementation functions out as the
+;;; bounding boxes are built once, at program start.
+
+(defmethod bounding-box ((sphere sphere) t0 t1)
+  (let ((r (sphere-radius sphere)))
+    (flet ((bounding-box* (c)
+             (make-aabb :min (offset-point c (make-vec (- r) (- r) (- r)))
+                        :max (offset-point c (make-vec r r r)))))
+      (if (null (sphere-to-centre sphere))
+          (bounding-box* (sphere-from-centre sphere))
+          (surrounding-box (bounding-box* (sphere-centre-at sphere t0))
+                           (bounding-box* (sphere-centre-at sphere t1)))))))
+
+(defmethod bounding-box ((objects sequence) t0 t1)
+  (reduce (lambda (&optional a b)
+            (and a b (surrounding-box a b)))
+          objects
+          :key (lambda (o) (bounding-box o t0 t1))))
+
+(defmethod bounding-box ((node bvh-node) t0 t1)
+  (bvh-node-box node))
 
 (defstruct (camera (:constructor nil))
   (lower-left-corner (make-point 0 0 0) :type point)
