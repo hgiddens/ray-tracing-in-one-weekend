@@ -44,9 +44,9 @@ std::uniform_real_distribution<double> material::dist{-1, 1};
 lambertian::lambertian(std::mt19937& mt, vec3 const albedo)
     : material(mt), albedo(albedo) {}
 
-std::optional<scatter_record> lambertian::scatter(ray const& r [[gnu::unused]], hit_record const& hit) const {
+std::optional<scatter_record> lambertian::scatter(ray const& r, hit_record const& hit) const {
     vec3 const target = hit.p + hit.normal + random_in_unit_sphere();
-    return std::optional<scatter_record>(std::in_place, albedo, ray{hit.p, target - hit.p});
+    return std::optional<scatter_record>(std::in_place, albedo, ray{hit.p, target - hit.p, r.time()});
 }
 
 metal::metal(std::mt19937& mt, vec3 const albedo, double const fuzziness)
@@ -56,7 +56,7 @@ metal::metal(std::mt19937& mt, vec3 const albedo, double const fuzziness)
 
 std::optional<scatter_record> metal::scatter(ray const& r, hit_record const& hit) const {
     vec3 const reflected = reflect(r.direction().unit_vector(), hit.normal);
-    ray const scattered{hit.p, reflected + fuzziness * random_in_unit_sphere()};
+    ray const scattered{hit.p, reflected + fuzziness * random_in_unit_sphere(), r.time()};
     if (scattered.direction().dot(hit.normal) > 0) {
         return std::optional<scatter_record>(std::in_place, albedo, scattered);
     } else {
@@ -88,9 +88,9 @@ std::optional<scatter_record> dielectric::scatter(ray const& r, hit_record const
 
     double const reflect_prob = refracted ? schlick(cosine, refractive_index) : 1.0;
     if (reflect_dist(mt) < reflect_prob) {
-        return std::optional<scatter_record>(std::in_place, attenuation, ray{hit.p, reflected});
+        return std::optional<scatter_record>(std::in_place, attenuation, ray{hit.p, reflected, r.time()});
     } else {
         assert(refracted);
-        return std::optional<scatter_record>(std::in_place, attenuation, ray{hit.p, *refracted});
+        return std::optional<scatter_record>(std::in_place, attenuation, ray{hit.p, *refracted, r.time()});
     }
 }

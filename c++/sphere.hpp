@@ -6,7 +6,6 @@
 #include "object.hpp"
 
 class sphere final : public object {
-public:
     vec3 centre;
     double radius;
     std::unique_ptr<material const> mat;

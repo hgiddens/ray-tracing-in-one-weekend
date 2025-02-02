@@ -10,6 +10,7 @@
 #include "camera.hpp"
 #include "colour.hpp"
 #include "material.hpp"
+#include "moving_sphere.hpp"
 #include "object_list.hpp"
 #include "ray.hpp"
 #include "sphere.hpp"
@@ -62,16 +63,18 @@ namespace {
                     continue;
                 }
 
-                std::unique_ptr<const material> material;
                 double const choose_mat = dist(mt);
                 if (choose_mat < 0.8) {
-                    material = std::make_unique<const lambertian>(mt, vec3{dist(mt) * dist(mt), dist(mt) * dist(mt), dist(mt) * dist(mt)});
+                    vec3 const offset{0, 0.5 * dist(mt), 0};
+                    objects.push_back(std::make_unique<moving_sphere const>(centre, centre + offset, 0, 1, 0.2,
+                                                                            std::make_unique<const lambertian>(mt, vec3{dist(mt) * dist(mt), dist(mt) * dist(mt), dist(mt) * dist(mt)})));
                 } else if (choose_mat < 0.95) {
-                    material = std::make_unique<const metal>(mt, vec3{0.5*(1 + dist(mt)), 0.5*(1 + dist(mt)), 0.5*(1 + dist(mt))}, 0.5*dist(mt));
+                    objects.push_back(std::make_unique<sphere const>(centre, 0.2,
+                                                                     std::make_unique<const metal>(mt, vec3{0.5*(1 + dist(mt)), 0.5*(1 + dist(mt)), 0.5*(1 + dist(mt))}, 0.5*dist(mt))));
                 } else {
-                    material = std::make_unique<const dielectric>(mt, 1.5);
+                    objects.push_back(std::make_unique<sphere const>(centre, 0.2,
+                                                                     std::make_unique<const dielectric>(mt, 1.5)));
                 }
-                objects.push_back(std::make_unique<sphere const>(centre, 0.2, std::move(material)));
             }
         }
         
@@ -97,7 +100,7 @@ int main() {
     double const
         dist_to_focus = 10,
         aperture = 0;
-    camera camera{mt, from, at, vec3{0, 1, 0}, 20, double(nx) / double(ny), aperture, dist_to_focus};
+    camera camera{mt, from, at, vec3{0, 1, 0}, 20, double(nx) / double(ny), aperture, dist_to_focus, 0, 1};
 
     std::vector<colour> buffer;
     buffer.reserve(nx * ny);
