@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -91,16 +92,17 @@ int main() {
     std::uniform_real_distribution<double> dist{0, 1};
     object const& world = build_world(mt);
     vec3 const
-        from{15, 2, 3},
-        at{-2, 0.2, -1};
+        from{13, 2, 3},
+        at{0, 0, 0};
     double const
-        dist_to_focus = (from - at).length(),
-        aperture = 0.2;
-    camera camera{mt, from, at, vec3{0, 1, 0}, 13, double(nx) / double(ny), aperture, dist_to_focus};
+        dist_to_focus = 10,
+        aperture = 0;
+    camera camera{mt, from, at, vec3{0, 1, 0}, 20, double(nx) / double(ny), aperture, dist_to_focus};
 
     std::vector<colour> buffer;
     buffer.reserve(nx * ny);
-    
+
+    const auto render_start = std::chrono::steady_clock::now();
     for (int j = ny - 1; j >= 0; --j) {
         for (int i = 0; i < nx; ++i) {
             supersampler supersampler;
@@ -117,6 +119,8 @@ int main() {
             buffer.push_back(supersampler.value().gamma2());
         }
     }
+    const auto render_end = std::chrono::steady_clock::now();
+    std::cerr << "Render duration: " << std::chrono::duration<double>{render_end - render_start} << "\n";
 
     std::cout << "P3\n" << nx << " " << ny << "\n255\n";
     for (colour const& colour : buffer) {
