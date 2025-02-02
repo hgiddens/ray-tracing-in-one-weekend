@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "aabb.hpp"
 #include "ray.hpp"
 
 class material;
@@ -15,6 +16,7 @@ struct hit_record {
 
 class object {
 public:
-    virtual ~object() {}
+    virtual ~object() = default;
     virtual std::optional<hit_record> hit(ray const& r, double t_min, double t_max) const = 0;
+    virtual std::optional<aabb> bounding_box(double t0, double t1) const = 0;
 };

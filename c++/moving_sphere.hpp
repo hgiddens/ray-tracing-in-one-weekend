@@ -15,4 +15,5 @@ class moving_sphere final : public object {
 public:
     moving_sphere(vec3 centre0, vec3 centre1, double time0, double time1, double radius, std::unique_ptr<material const> mat);
     std::optional<hit_record> hit(ray const& r, double t_min, double t_max) const override;
+    std::optional<aabb> bounding_box(double t0, double t1) const override;
 };

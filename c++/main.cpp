@@ -7,6 +7,7 @@
 #include <random>
 #include <vector>
 
+#include "bvh_node.hpp"
 #include "camera.hpp"
 #include "colour.hpp"
 #include "material.hpp"
@@ -78,7 +79,7 @@ namespace {
             }
         }
         
-        return objects;
+        return object_list(std::make_unique<bvh_node const>(mt, objects, 0, 1));
     }
 }
 

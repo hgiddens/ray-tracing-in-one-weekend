@@ -43,3 +43,8 @@ std::optional<hit_record> sphere::hit(ray const& r, double const t_min, double c
 
     return std::nullopt;
 }
+
+std::optional<aabb> sphere::bounding_box(double const t0 [[gnu::unused]], double const t1 [[gnu::unused]]) const {
+    vec3 const rv = vec3(radius, radius, radius);
+    return aabb(centre - rv, centre + rv);
+}

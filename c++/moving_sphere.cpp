@@ -47,3 +47,14 @@ std::optional<hit_record> moving_sphere::hit(ray const& r, double t_min, double 
 
     return std::nullopt;
 }
+
+std::optional<aabb> moving_sphere::bounding_box(double const t0, double const t1) const {
+    vec3 const
+        rv = vec3(radius, radius, radius),
+        c0 = centre(t0),
+        c1 = centre(t1);
+    aabb const
+        box0{c0 - rv, c0 + rv},
+        box1{c1 - rv, c0 + rv};
+    return aabb::surrounding_box(box0, box1);
+}
