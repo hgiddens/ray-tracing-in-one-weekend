@@ -48,7 +48,7 @@ namespace {
         }
     }
 
-    object_list build_world(std::mt19937& mt) {
+    bvh_node build_world(std::mt19937& mt) {
         std::vector<std::unique_ptr<object const>> objects;
         objects.reserve(500);  // 488-ish
         objects.push_back(std::make_unique<sphere const>(vec3{0, -1000, -1}, 1000, std::make_unique<lambertian const>(mt, vec3{0.5, 0.5, 0.5})));
@@ -78,8 +78,9 @@ namespace {
                 }
             }
         }
-        
-        return object_list(std::make_unique<bvh_node const>(mt, objects, 0, 1));
+
+        // TODO: I think bvh_node obsoletes object_list?
+        return bvh_node(mt, objects, 0, 1);
     }
 }
 

@@ -29,7 +29,9 @@ bvh_node::bvh_node(std::mt19937& mt, std::span<std::unique_ptr<object const>> ob
 
     assert(objects.size() > 0);
     if (objects.size() == 1) {
-        left = std::move(objects[0]);
+        // This seems silly but it's in the book and I'm too lazy to fix the
+        // Lisp code I want to compare this to.
+        left = right = std::shared_ptr(std::move(objects[0]));
     } else if (objects.size() == 2) {
         left = std::move(objects[0]);
         right = std::move(objects[1]);
@@ -38,21 +40,13 @@ bvh_node::bvh_node(std::mt19937& mt, std::span<std::unique_ptr<object const>> ob
         right = std::make_unique<bvh_node const>(mt, objects.subspan(objects.size() / 2), t0, t1);
     }
 
-    if (right == nullptr) {
-        std::optional<aabb> box_left = left->bounding_box(t0, t1);
-        if (box_left == std::nullopt) {
-            throw "no bounding box in bvh_node constructor";
-        }
-        box = *box_left;
-    } else {
-        std::optional<aabb> const
-            box_left = left->bounding_box(t0, t1),
-            box_right = right->bounding_box(t0, t1);
-        if (box_left == std::nullopt || box_right == std::nullopt) {
-            throw "no bounding box in bvh_node constructor";
-        }
-        box = aabb::surrounding_box(*box_left, *box_right);
+    std::optional<aabb> const
+        box_left = left->bounding_box(t0, t1),
+        box_right = right->bounding_box(t0, t1);
+    if (box_left == std::nullopt || box_right == std::nullopt) {
+        throw "no bounding box in bvh_node constructor";
     }
+    box = aabb::surrounding_box(*box_left, *box_right);
 }
 
 std::optional<hit_record> bvh_node::hit(ray const& r, double const t_min, double const t_max) const {

@@ -173,62 +173,56 @@
 
 (declaim (ftype (function (ray aabb double-float (or double-float null)) boolean) hit-test-aabb))
 (defun hit-test-aabb (ray aabb n-min n-max &aux n-min* n-max*)
-  ;; There's also :invalid to handle (quiet) NaNs, which the book mentions we
-  ;; may encounter at some point. There are also predicates for the "fun"
-  ;; floating-point values in SB-EXT. There are also reader literals e.g.
-  ;; #.DOUBLE-FLOAT-POSITIVE-INFINITY.
-  (sb-int:with-float-traps-masked (:divide-by-zero)
-    ;; Not part of the hit-test generic function because it returns a bool
-    ;; rather than a hit-record. Although it could? There's no requirement that
-    ;; all the methods in a generic function return the same type?
+  ;; Not part of the hit-test generic function because it returns a bool
+  ;; rather than a hit-record. Although it could? There's no requirement that
+  ;; all the methods in a generic function return the same type?
 
-    ;; This can obviously be improved, but at the moment I don't care to do
-    ;; so. Defining a function that takes a slot name as an argument is slow;
-    ;; macros seem pretty much as complicated for this simple use case.
+  ;; This can obviously be improved, but at the moment I don't care to do
+  ;; so. Defining a function that takes a slot name as an argument is slow;
+  ;; macros seem pretty much as complicated for this simple use case.
+  (let* ((inv-d (/ 1d0 (vec-x (ray-direction ray))))
+         (t0 (* (- (point-x (aabb-min aabb))
+                   (point-x (ray-origin ray)))
+                inv-d))
+         (t1 (* (- (point-x (aabb-max aabb))
+                   (point-x (ray-origin ray)))
+                inv-d)))
+    (when (minusp inv-d)
+      (rotatef t0 t1))
+    (setf n-min* (max n-min t0)
+          n-max* (if (or (null n-max) (< t1 n-max)) t1 n-max))
+    (when (<= n-max* n-min*)
+      (return-from hit-test-aabb nil)))
 
-    (let* ((inv-d (/ 1d0 (vec-x (ray-direction ray))))
-           (t0 (* (- (point-x (aabb-min aabb))
-                     (point-x (ray-origin ray)))
-                  inv-d))
-           (t1 (* (- (point-x (aabb-max aabb))
-                     (point-x (ray-origin ray)))
-                  inv-d)))
-      (when (minusp inv-d)
-        (rotatef t0 t1))
-      (setf n-min* (max n-min t0)
-            n-max* (if (or (null n-max) (< t1 n-max)) t1 n-max))
-      (when (<= n-max* n-min*)
-        (return-from hit-test-aabb nil)))
+  (let* ((inv-d (/ 1d0 (vec-y (ray-direction ray))))
+         (t0 (* (- (point-y (aabb-min aabb))
+                   (point-y (ray-origin ray)))
+                inv-d))
+         (t1 (* (- (point-y (aabb-max aabb))
+                   (point-y (ray-origin ray)))
+                inv-d)))
+    (when (minusp inv-d)
+      (rotatef t0 t1))
+    (setf n-min* (max n-min* t0)
+          n-max* (min t1 n-max*))
+    (when (<= n-max* n-min*)
+      (return-from hit-test-aabb nil)))
 
-    (let* ((inv-d (/ 1d0 (vec-y (ray-direction ray))))
-           (t0 (* (- (point-y (aabb-min aabb))
-                     (point-y (ray-origin ray)))
-                  inv-d))
-           (t1 (* (- (point-y (aabb-max aabb))
-                     (point-y (ray-origin ray)))
-                  inv-d)))
-      (when (minusp inv-d)
-        (rotatef t0 t1))
-      (setf n-min* (max n-min* t0)
-            n-max* (min t1 n-max*))
-      (when (<= n-max* n-min*)
-        (return-from hit-test-aabb nil)))
+  (let* ((inv-d (/ 1d0 (vec-z (ray-direction ray))))
+         (t0 (* (- (point-z (aabb-min aabb))
+                   (point-z (ray-origin ray)))
+                inv-d))
+         (t1 (* (- (point-z (aabb-max aabb))
+                   (point-z (ray-origin ray)))
+                inv-d)))
+    (when (minusp inv-d)
+      (rotatef t0 t1))
+    (setf n-min* (max n-min* t0)
+          n-max* (min n-max* t1))
+    (when (<= n-max* n-min*)
+      (return-from hit-test-aabb nil)))
 
-    (let* ((inv-d (/ 1d0 (vec-z (ray-direction ray))))
-           (t0 (* (- (point-z (aabb-min aabb))
-                     (point-z (ray-origin ray)))
-                  inv-d))
-           (t1 (* (- (point-z (aabb-max aabb))
-                     (point-z (ray-origin ray)))
-                  inv-d)))
-      (when (minusp inv-d)
-        (rotatef t0 t1))
-      (setf n-min* (max n-min* t0)
-            n-max* (min n-max* t1))
-      (when (<= n-max* n-min*)
-        (return-from hit-test-aabb nil)))
-
-    t))
+  t)
 
 (defstruct (sphere (:constructor
                        make-sphere (&key
@@ -276,21 +270,17 @@
         (axis (let ((axes #(x y z)))
                 (elt axes (random (length axes))))))
     (setf objects (sort objects (lambda (a b)
-                                  ;; Why doesn't this use time0 and time1?
-                                  ;; Just because std::qsort makes it hard?
-                                  ;; Fix.
-                                  (let ((a-box (bounding-box a 0d0 0d0))
-                                        (b-box (bounding-box b 0d0 0d0)))
+                                  ;; Difference to book: uses time0 and time1 here
+                                  (let ((a-box (bounding-box a time0 time1))
+                                        (b-box (bounding-box b time0 time1)))
                                     (unless (and a-box b-box)
                                       (error "no bounding box in bvh-node construction"))
-                                    (if (minusp (- (slot-value (aabb-min a-box) axis)
-                                                   (slot-value (aabb-min b-box) axis)))
-                                        -1
-                                        1)))))
+                                    (< (slot-value (aabb-min a-box) axis)
+                                       (slot-value (aabb-min b-box) axis))))))
+    (assert (> n 0))
     (case n
-      (0)
-      ;; This seems unfortunate.
       (1
+       ;; This seems silly but it's what's in the book.
        (setf (bvh-node-left node) (elt objects 0)
              (bvh-node-right node) (elt objects 0)))
       (2
@@ -525,7 +515,7 @@
                (n (* 0.5 (1+ (vec-y unit-direction)))))
           (make-colour (linear-interpolation 1 0.5 n) (linear-interpolation 1 0.7 n) 1)))))
 
-(defparameter *antialiasing-sample-count* 100)
+(defparameter *antialiasing-sample-count* 10)
 
 (defparameter *scene* (vector (make-sphere :centre (make-point 0 0 -1)
                                            :radius 0.5
@@ -597,27 +587,37 @@
     (coerce list 'vector)))
 
 (defun test-image (nx ny)
-  (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
-        (camera (let ((from (make-point 13 2 3))
-                      (at (make-point 0 0 0)))
-                  (make-camera :from from
-                               :at at
-                               :vertical-fov 20
-                               :aspect-ratio (/ nx ny)
-                               :lens-radius 0
-                               :focus-distance 10
-                               :t0 0
-                               :t1 1))))
-    (loop for j below ny do
-      (loop for i below nx do
-        (let (samples)
-          (dotimes (s *antialiasing-sample-count*)
-            (let* ((u (/ (+ i (random 1d0)) nx))
-                   (v (/ (+ j (random 1d0)) ny))
-                   (r (get-ray camera u v)))
-              (push (ray-colour r *scene* 0) samples)))
-          (setf (aref a j i) (apply #'blend-colours samples)))))
-    a))
+  ;; There's also :invalid to handle (quiet) NaNs, which the book mentions we
+  ;; may encounter at some point. There are also predicates for the "fun"
+  ;; floating-point values in SB-EXT. There are also reader literals e.g.
+  ;; #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY.
+  ;;
+  ;; This is here rather than closer to where the float stuff actually happens
+  ;; because it's apparently slow to toggle (also, apparently it only works on
+  ;; the main thread or something, which, yikes, so I guess we might fix it
+  ;; differently one day).
+  (sb-int:with-float-traps-masked (:divide-by-zero)
+    (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
+          (camera (let ((from (make-point 13 2 3))
+                        (at (make-point 0 0 0)))
+                    (make-camera :from from
+                                 :at at
+                                 :vertical-fov 20
+                                 :aspect-ratio (/ nx ny)
+                                 :lens-radius 0
+                                 :focus-distance 10
+                                 :t0 0
+                                 :t1 1))))
+      (loop for j below ny do
+        (loop for i below nx do
+          (let (samples)
+            (dotimes (s *antialiasing-sample-count*)
+              (let* ((u (/ (+ i (random 1d0)) nx))
+                     (v (/ (+ j (random 1d0)) ny))
+                     (r (get-ray camera u v)))
+                (push (ray-colour r *scene* 0) samples)))
+            (setf (aref a j i) (apply #'blend-colours samples)))))
+      a)))
 
 (defun write-image (image)
   "Writes an image in PPM format to *standard-output*."
