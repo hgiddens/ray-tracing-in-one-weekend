@@ -35,6 +35,21 @@
   (with-slots (r g b) c
     (make-colour (sqrt r) (sqrt g) (sqrt b))))
 
+(defstruct chequer even odd)
+
+(defgeneric texture-value (texture u v p))
+
+(defmethod texture-value ((colour colour) u v p)
+  (declare (ignore u v p))
+  colour)
+
+(defmethod texture-value ((chequer chequer) u v p)
+  (flet ((sin10 (x) (sin (* 10 x))))
+    (let ((sines (* (sin10 (point-x p)) (sin10 (point-y p)) (sin10 (point-z p)))))
+      (if (minusp sines)
+          (texture-value (chequer-odd chequer) u v p)
+          (texture-value (chequer-even chequer) u v p)))))
+
 (defstruct (vec (:constructor make-vec (x y z &aux
                                                 (x (coerce x 'double-float))
                                                 (y (coerce y 'double-float))
@@ -445,11 +460,11 @@
 (defun scatter (ray-in hit)
   (scatter* (hit-record-material hit) ray-in (hit-record-point hit) (hit-record-normal hit)))
 
-(defstruct lambertian (albedo (make-colour 0 0 0) :type colour))
+(defstruct lambertian (albedo (make-colour 0 0 0)))
 
 (defmethod scatter* ((material lambertian) ray-in hit-point hit-normal)
   (let ((target (offset-point hit-point (vec+ hit-normal (random-in-unit-sphere)))))
-    (make-scatter-record :attenuation (lambertian-albedo material)
+    (make-scatter-record :attenuation (texture-value (lambertian-albedo material) 0 0 hit-point)
                          :scatter-ray (make-ray :origin hit-point
                                                 :direction (point-difference target hit-point)
                                                 :time (ray-time ray-in)))))
@@ -540,9 +555,11 @@
          (clear-centre (make-point 4 small-radius 0))
          (clear-radius 0.9)
          list)
-    (push (make-sphere :centre (make-point 0 -1000 0)
-                       :radius 1000
-                       :material (make-lambertian :albedo (make-colour 0.5 0.5 0.5)))
+    (push (let ((texture (make-chequer :even (make-colour 0.2 0.3 0.1)
+                                       :odd (make-colour 0.9 0.9 0.9))))
+            (make-sphere :centre (make-point 0 -1000 0)
+                         :radius 1000
+                         :material (make-lambertian :albedo texture)))
           list)
     (push (make-sphere :centre (make-point 0 1 0)
                        :radius big-radius
@@ -604,7 +621,7 @@
                                  :at at
                                  :vertical-fov 20
                                  :aspect-ratio (/ nx ny)
-                                 :lens-radius 0
+                                 :lens-radius 0.05
                                  :focus-distance 10
                                  :t0 0
                                  :t1 1))))
