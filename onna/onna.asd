@@ -7,4 +7,5 @@
   :version "0.0.1"
   :components ((:file "package")
                (:file "onna"))
-  :depends-on (:random-state))
+  :depends-on (:alexandria
+               :random-state))

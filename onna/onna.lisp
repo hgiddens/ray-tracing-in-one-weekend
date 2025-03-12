@@ -3,10 +3,6 @@
 ;; (declaim (optimize (speed 0) (space 0) (safety 3) (debug 3) (compilation-speed 0)))
 (declaim (optimize (speed 3) (space 0) (safety 0) (debug 0) (compilation-speed 0)))
 
-(defun linear-interpolation (start end n)
-  "Linear interpolation of N between START and END"
-  (+ (* (- 1 n) start) (* n end)))
-
 (defstruct (colour (:constructor make-colour (r g b)))
   (r 0 :type (real 0 1))
   (g 0 :type (real 0 1))
@@ -46,9 +42,7 @@
 (defmethod texture-value ((chequer chequer) u v p)
   (flet ((sin10 (x) (sin (* 10 x))))
     (let ((sines (* (sin10 (point-x p)) (sin10 (point-y p)) (sin10 (point-z p)))))
-      (if (minusp sines)
-          (texture-value (chequer-odd chequer) u v p)
-          (texture-value (chequer-even chequer) u v p)))))
+      (texture-value (if (minusp sines) (chequer-odd chequer) (chequer-even chequer)) u v p))))
 
 (defstruct (vec (:constructor make-vec (x y z &aux
                                                 (x (coerce x 'double-float))
@@ -116,11 +110,10 @@
 (defun vec+ (&rest vs)
   "Returns a new VEC representing the sum of VS"
   (let ((s (make-vec 0 0 0)))
-    (with-slots (x y z) s
-      (dolist (v vs s)
-        (incf x (vec-x v))
-        (incf y (vec-y v))
-        (incf z (vec-z v))))))
+    (dolist (v vs s)
+      (incf (vec-x s) (vec-x v))
+      (incf (vec-y s) (vec-y v))
+      (incf (vec-z s) (vec-z v)))))
 
 (defun vec- (&rest vs)
   "See vec+"
@@ -129,11 +122,10 @@
     ((null (cdr vs)) (with-slots (x y z) (car vs)
                        (make-vec (- x) (- y) (- z))))
     (t (let ((s (copy-vec (car vs))))
-         (with-slots (x y z) s
-           (dolist (v (cdr vs) s)
-             (decf x (vec-x v))
-             (decf y (vec-y v))
-             (decf z (vec-z v))))))))
+         (dolist (v (cdr vs) s)
+           (decf (vec-x s) (vec-x v))
+           (decf (vec-y s) (vec-y v))
+           (decf (vec-z s) (vec-z v)))))))
 
 (defun unit-vec (v)
   "Returns a new VEC representing V scaled to a unit length"
@@ -218,8 +210,8 @@
                 inv-d)))
     (when (minusp inv-d)
       (rotatef t0 t1))
-    (setf n-min* (max n-min* t0)
-          n-max* (min t1 n-max*))
+    (alexandria:maxf n-min* t0)
+    (alexandria:minf n-max* t1)
     (when (<= n-max* n-min*)
       (return-from hit-test-aabb nil)))
 
@@ -232,8 +224,8 @@
                 inv-d)))
     (when (minusp inv-d)
       (rotatef t0 t1))
-    (setf n-min* (max n-min* t0)
-          n-max* (min n-max* t1))
+    (alexandria:maxf n-min* t0)
+    (alexandria:minf n-max* t1)
     (when (<= n-max* n-min*)
       (return-from hit-test-aabb nil)))
 
@@ -293,25 +285,24 @@
                                     (< (slot-value (aabb-min a-box) axis)
                                        (slot-value (aabb-min b-box) axis))))))
     (assert (> n 0))
-    (case n
-      (1
-       ;; This seems silly but it's what's in the book.
-       (setf (bvh-node-left node) (elt objects 0)
-             (bvh-node-right node) (elt objects 0)))
-      (2
-       (setf (bvh-node-left node) (elt objects 0)
-             (bvh-node-right node) (elt objects 1)))
-      (otherwise
-       (let ((split (floor (/ n 2))))
-         (setf (bvh-node-left node) (make-bvh-node (subseq objects 0 split) time0 time1)
-               (bvh-node-right node) (make-bvh-node (subseq objects split) time0 time1)))))
-    (let ((box-left (when (bvh-node-left node) (bounding-box (bvh-node-left node) time0 time1)))
-          (box-right (when (bvh-node-right node) (bounding-box (bvh-node-right node) time0 time1))))
-      (unless (and box-left box-right)
-        ;; Is this actually an error? It just means the node has no bounding
-        ;; box, right?
-        (error "no bounding box in bvh-node construction"))
-      (setf (bvh-node-box node) (surrounding-box box-left box-right)))
+    (with-slots (left right) node
+      (case n
+        (1
+         ;; This seems silly but it's what's in the book.
+         (setf left (elt objects 0)
+               right (elt objects 0)))
+        (2
+         (setf left (elt objects 0)
+               right (elt objects 1)))
+        (otherwise
+         (let ((split (floor (/ n 2))))
+           (setf left (make-bvh-node (subseq objects 0 split) time0 time1)
+                 right (make-bvh-node (subseq objects split) time0 time1)))))
+      (alexandria:if-let ((box-left (when left (bounding-box left time0 time1)))
+                          (box-right (when right (bounding-box right time0 time1))))
+        (setf (bvh-node-box node) (surrounding-box box-left box-right))
+        ;; Is this actually an error? It just means the node has no bounding box, right?
+        (error "no bounding box in bvh-node construction")))
     node))
 
 (defstruct hit-record
@@ -354,9 +345,8 @@
 (defun hit-test-seq (ray objects n-min n-max)
   (let (closest)
     (dotimes (i (length objects) closest)
-      (let ((hit (hit-test ray (elt objects i) n-min (if closest (hit-record-n closest) n-max))))
-        (when hit
-          (setf closest hit))))))
+      (alexandria:when-let ((hit (hit-test ray (elt objects i) n-min (if closest (hit-record-n closest) n-max))))
+        (setf closest hit)))))
 
 (defmethod hit-test (ray (objects sequence) n-min &optional n-max)
   (hit-test-seq ray objects n-min n-max))
@@ -376,7 +366,6 @@
 (defmethod hit-test (ray (node bvh-node) n-min &optional n-max)
   (hit-test-node ray node n-min n-max))
 
-
 (defgeneric bounding-box (object t0 t1)
   (:documentation "Returns the axis-aligned bounding box (AABB) of OBJECT between times t0 and t1."))
 
@@ -384,10 +373,10 @@
 ;;; bounding boxes are built once, at program start.
 
 (defmethod bounding-box ((sphere sphere) t0 t1)
-  (let ((r (sphere-radius sphere)))
+  (let* ((r (sphere-radius sphere))
+         (r-vec (make-vec r r r)))
     (flet ((bounding-box* (c)
-             (make-aabb :min (offset-point c (make-vec (- r) (- r) (- r)))
-                        :max (offset-point c (make-vec r r r)))))
+             (make-aabb :min (offset-point c (vec- r-vec)) :max (offset-point c r-vec))))
       (if (null (sphere-to-centre sphere))
           (bounding-box* (sphere-from-centre sphere))
           (surrounding-box (bounding-box* (sphere-centre-at sphere t0))
@@ -422,12 +411,12 @@
          (w (unit-vec (point-difference from at)))
          (u (unit-vec (cross up w)))
          (v (cross w u)))
-    (setf focus-distance (coerce focus-distance 'double-float))
     (with-slots (lower-left-corner horizontal vertical origin) camera
-      (setf lower-left-corner (vec- from
-                                    (scaled-vec u (* width/2 focus-distance))
-                                    (scaled-vec v (* height/2 focus-distance))
-                                    (scaled-vec w focus-distance))
+      (setf focus-distance (coerce focus-distance 'double-float)
+            lower-left-corner (vec- from
+                               (scaled-vec u (* width/2 focus-distance))
+                               (scaled-vec v (* height/2 focus-distance))
+                               (scaled-vec w focus-distance))
             horizontal (scaled-vec u (* 2 width/2 focus-distance))
             vertical (scaled-vec v (* 2 height/2 focus-distance))
             origin from
@@ -448,7 +437,7 @@
                                (scaled-vec (camera-vertical camera) t*)
                                (point-difference (make-point 0 0 0) (camera-origin camera))
                                (vec- offset))
-              :time (linear-interpolation (camera-t0 camera) (camera-t1 camera) (random 1d0)))))
+              :time (coerce (alexandria:lerp (random 1.0) (camera-t0 camera) (camera-t1 camera)) 'double-float))))
 
 (defstruct scatter-record
   (attenuation (make-colour 0 0 0) :type colour)
@@ -519,16 +508,15 @@
 (defparameter *ray-recursion-depth-limit* 50)
 
 (defun ray-colour (r world depth)
-  (let ((hit (hit-test r world 0.001d0 nil)))
-    (if hit
-        (let ((scatter (scatter r hit)))
-          (if (and (< depth *ray-recursion-depth-limit*) scatter)
-              (attenuate (scatter-record-attenuation scatter)
-                         (ray-colour (scatter-record-scatter-ray scatter) world (1+ depth)))
-              (make-colour 0 0 0)))
-        (let* ((unit-direction (unit-vec (ray-direction r)))
-               (n (* 0.5 (1+ (vec-y unit-direction)))))
-          (make-colour (linear-interpolation 1 0.5 n) (linear-interpolation 1 0.7 n) 1)))))
+  (alexandria:if-let ((hit (hit-test r world 0.001d0 nil)))
+    (let ((scatter (scatter r hit)))
+      (if (and (< depth *ray-recursion-depth-limit*) scatter)
+          (attenuate (scatter-record-attenuation scatter)
+                     (ray-colour (scatter-record-scatter-ray scatter) world (1+ depth)))
+          (make-colour 0 0 0)))
+    (let* ((unit-direction (unit-vec (ray-direction r)))
+           (n (* 0.5 (1+ (vec-y unit-direction)))))
+      (make-colour (alexandria:lerp n 1 0.5) (alexandria:lerp n 1 0.7) 1))))
 
 (defparameter *antialiasing-sample-count* 10)
 
