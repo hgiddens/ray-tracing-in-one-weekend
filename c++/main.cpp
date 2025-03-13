@@ -16,6 +16,7 @@
 #include "ray.hpp"
 #include "sphere.hpp"
 #include "supersampler.hpp"
+#include "texture.hpp"
 
 namespace {
     // deal with shadow acne
@@ -51,9 +52,12 @@ namespace {
     bvh_node build_world(std::mt19937& mt) {
         std::vector<std::unique_ptr<object const>> objects;
         objects.reserve(500);  // 488-ish
-        objects.push_back(std::make_unique<sphere const>(vec3{0, -1000, -1}, 1000, std::make_unique<lambertian const>(mt, vec3{0.5, 0.5, 0.5})));
+        auto chequer = std::make_unique<chequer_texture const>(
+            std::make_unique<constant_texture const>(colour{0.2, 0.3, 0.1}),
+            std::make_unique<constant_texture const>(colour{0.9, 0.9, 0.9}));
+        objects.push_back(std::make_unique<sphere const>(vec3{0, -1000, -1}, 1000, std::make_unique<lambertian const>(mt, std::move(chequer))));
         objects.push_back(std::make_unique<sphere const>(vec3{0, 1, 0}, 1, std::make_unique<dielectric>(mt, 1.5)));
-        objects.push_back(std::make_unique<sphere const>(vec3{-4, 1, 0}, 1, std::make_unique<lambertian>(mt, vec3{0.4, 0.2, 0.1})));
+        objects.push_back(std::make_unique<sphere const>(vec3{-4, 1, 0}, 1, std::make_unique<lambertian>(mt, std::make_unique<constant_texture const>(colour{0.4, 0.2, 0.1}))));
         objects.push_back(std::make_unique<sphere const>(vec3{4, 1, 0}, 1, std::make_unique<metal>(mt, vec3{0.7, 0.6, 0.5}, 0)));
 
         std::uniform_real_distribution<double> dist{0, 1};
@@ -67,8 +71,10 @@ namespace {
                 double const choose_mat = dist(mt);
                 if (choose_mat < 0.8) {
                     vec3 const offset{0, 0.5 * dist(mt), 0};
+                    colour const c{dist(mt) * dist(mt), dist(mt) * dist(mt), dist(mt) * dist(mt)};
+                    auto t = std::make_unique<constant_texture const>(c);
                     objects.push_back(std::make_unique<moving_sphere const>(centre, centre + offset, 0, 1, 0.2,
-                                                                            std::make_unique<const lambertian>(mt, vec3{dist(mt) * dist(mt), dist(mt) * dist(mt), dist(mt) * dist(mt)})));
+                                                                            std::make_unique<lambertian const>(mt, std::move(t))));
                 } else if (choose_mat < 0.95) {
                     objects.push_back(std::make_unique<sphere const>(centre, 0.2,
                                                                      std::make_unique<const metal>(mt, vec3{0.5*(1 + dist(mt)), 0.5*(1 + dist(mt)), 0.5*(1 + dist(mt))}, 0.5*dist(mt))));
@@ -90,7 +96,7 @@ namespace {
 // into the screen is negative z
 
 int main() {
-    int const nx = 200, ny = 100, ns = 10;
+    int const nx = 400, ny = 200, ns = 10;
 
     std::random_device rd;
     std::mt19937 mt(rd());

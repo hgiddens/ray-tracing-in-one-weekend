@@ -41,12 +41,14 @@ vec3 material::random_in_unit_sphere() const {
 
 std::uniform_real_distribution<double> material::dist{-1, 1};
 
-lambertian::lambertian(std::mt19937& mt, vec3 const albedo)
-    : material(mt), albedo(albedo) {}
+lambertian::lambertian(std::mt19937& mt, std::unique_ptr<texture const> texture)
+    : material(mt), t(std::move(texture)) {}
 
 std::optional<scatter_record> lambertian::scatter(ray const& r, hit_record const& hit) const {
     vec3 const target = hit.p + hit.normal + random_in_unit_sphere();
-    return std::optional<scatter_record>(std::in_place, albedo, ray{hit.p, target - hit.p, r.time()});
+    colour const c = t->value(0, 0, hit.p);
+    vec3 const attenuation{c.red(), c.green(), c.blue()};
+    return std::optional<scatter_record>(std::in_place, attenuation, ray{hit.p, target - hit.p, r.time()});
 }
 
 metal::metal(std::mt19937& mt, vec3 const albedo, double const fuzziness)

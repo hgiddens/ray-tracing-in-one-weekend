@@ -1,9 +1,11 @@
 #pragma once
 
 #include <optional>
+#include <memory>
 #include <random>
 
 #include "ray.hpp"
+#include "texture.hpp"
 #include "vec3.hpp"
 
 struct hit_record;
@@ -27,10 +29,10 @@ public:
 };
 
 class lambertian final : public material {
-    vec3 albedo;
+    std::unique_ptr<texture const> t;
 
 public:
-    lambertian(std::mt19937& mt, vec3 albedo);
+    lambertian(std::mt19937& mt, std::unique_ptr<texture const> texture);
     std::optional<scatter_record> scatter(ray const& ray, hit_record const& hit) const override;
 };
 
