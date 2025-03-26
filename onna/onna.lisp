@@ -31,19 +31,6 @@
   (with-slots (r g b) c
     (make-colour (sqrt r) (sqrt g) (sqrt b))))
 
-(defstruct chequer even odd)
-
-(defgeneric texture-value (texture u v p))
-
-(defmethod texture-value ((colour colour) u v p)
-  (declare (ignore u v p))
-  colour)
-
-(defmethod texture-value ((chequer chequer) u v p)
-  (flet ((sin10 (x) (sin (* 10 x))))
-    (let ((sines (* (sin10 (point-x p)) (sin10 (point-y p)) (sin10 (point-z p)))))
-      (texture-value (if (minusp sines) (chequer-odd chequer) (chequer-even chequer)) u v p))))
-
 (defstruct (vec (:constructor make-vec (x y z &aux
                                                 (x (coerce x 'double-float))
                                                 (y (coerce y 'double-float))
@@ -155,6 +142,95 @@
   (make-vec (- (point-x a) (point-x b))
             (- (point-y a) (point-y b))
             (- (point-z a) (point-z b))))
+
+(defstruct perlin
+  (random-vecs (let ((samples (make-array 256 :element-type 'vec :initial-element (make-vec 0 0 0))))
+                 (map-into samples (lambda ()
+                                     (unit-vec (make-vec (1- (random 2d0))
+                                                         (1- (random 2d0))
+                                                         (1- (random 2d0)))))))
+   :type (simple-array vec (256)))
+  (x
+   (coerce (alexandria:shuffle (alexandria:iota 256)) '(simple-array (unsigned-byte 8) (256)))
+   :type (simple-array (unsigned-byte 8) (256)))
+  (y
+   (coerce (alexandria:shuffle (alexandria:iota 256)) '(simple-array (unsigned-byte 8) (256)))
+   :type (simple-array (unsigned-byte 8) (256)))
+  (z
+   (coerce (alexandria:shuffle (alexandria:iota 256)) '(simple-array (unsigned-byte 8) (256)))
+   :type (simple-array (unsigned-byte 8) (256))))
+
+(defparameter *perlin* (make-perlin))
+
+(defun hermite-cubic (n)
+  ;; This fixes Mach bands, apparently.
+  (* n n (- 3 (* n 2))))
+
+(declaim (ftype (function ((simple-array vec (2 2 2))
+                           double-float
+                           double-float
+                           double-float)
+                          double-float)
+                perlin-interpolation))
+(defun perlin-interpolation (c u v w)
+  (loop with uu = (hermite-cubic u)
+        and vv = (hermite-cubic v)
+        and ww = (hermite-cubic w)
+        for i from 0 below 2
+        sum (loop for j from 0 below 2
+                  sum (loop for k from 0 below 2
+                            as weight = (make-vec (- u i) (- v j) (- w k))
+                            sum (* (alexandria:lerp i (- 1 uu) uu)
+                                   (alexandria:lerp j (- 1 vv) vv)
+                                   (alexandria:lerp k (- 1 ww) ww)
+                                   (dot (aref c i j k) weight))))))
+
+(defun noise (perlin p)
+  ;; I'm not sure what P is supposed to represent so I'm going to treat it like
+  ;; a vector rather than a point
+  (loop with (i u) = (multiple-value-list (floor (vec-x p)))
+        and (j v) = (multiple-value-list (floor (vec-y p)))
+        and (k w) = (multiple-value-list (floor (vec-z p)))
+        and c = (make-array '(2 2 2) :element-type 'vec :initial-element (make-vec 0 0 0))
+        for di from 0 below 2
+        as i-idx = (elt (perlin-x perlin) (logand (+ i di) 255))
+        do (loop for dj from 0 below 2
+                 as j-idx = (elt (perlin-y perlin) (logand (+ j dj) 255))
+                 do (loop for dk from 0 below 2
+                          as k-idx = (elt (perlin-z perlin) (logand (+ k dk) 255))
+                          as rf-idx = (logxor i-idx j-idx k-idx)
+                          do (setf (aref c di dj dk) (elt (perlin-random-vecs perlin) rf-idx))))
+        finally (return (perlin-interpolation c u v w))))
+
+(defun turbulence (perlin p depth)
+  (let ((accum 0d0)
+        (weight 1d0))
+    (dotimes (i depth)
+      (setf accum (+ accum (* weight (noise perlin p)))
+            weight (* weight 0.5d0)
+            p (scaled-vec p 2d0)))
+    (abs accum)))
+
+(defgeneric texture-value (texture u v p))
+
+(defmethod texture-value ((colour colour) u v p)
+  (declare (ignore u v p))
+  colour)
+
+(defstruct chequer even odd)
+
+(defmethod texture-value ((chequer chequer) u v p)
+  (flet ((sin10 (x) (sin (* 10 x))))
+    (let ((sines (* (sin10 (point-x p)) (sin10 (point-y p)) (sin10 (point-z p)))))
+      (texture-value (if (minusp sines) (chequer-odd chequer) (chequer-even chequer)) u v p))))
+
+(defstruct noise-texture (perlin nil :type perlin) (scale 1d0 :type double-float))
+
+(defmethod texture-value ((texture noise-texture) u v p)
+  (let* ((phase (+ (* (noise-texture-scale texture) (point-z p))
+                   (* 10 (turbulence (noise-texture-perlin texture) p 7))))
+         (grey (* 0.5 (1+ (sin phase)))))
+    (make-colour grey grey grey)))
 
 (defstruct ray
   (origin (make-point 0 0 0) :type point)
@@ -609,7 +685,7 @@
                                  :at at
                                  :vertical-fov 20
                                  :aspect-ratio (/ nx ny)
-                                 :lens-radius 0.05
+                                 :lens-radius 0
                                  :focus-distance 10
                                  :t0 0
                                  :t1 1))))
