@@ -49,6 +49,15 @@ namespace {
         }
     }
 
+    object_list two_perlin_spheres(std::mt19937& mt) {
+        std::vector<std::unique_ptr<object const>> objects;
+
+        objects.push_back(std::make_unique<sphere const>(vec3{0, -1000, 0}, 1000, std::make_unique<lambertian const>(mt, std::make_unique<perlin_texture const>())));
+        objects.push_back(std::make_unique<sphere const>(vec3{0, 2, 0}, 2, std::make_unique<lambertian const>(mt, std::make_unique<perlin_texture const>())));
+
+        return object_list(std::move(objects));
+    }
+
     bvh_node build_world(std::mt19937& mt) {
         std::vector<std::unique_ptr<object const>> objects;
         objects.reserve(500);  // 488-ish
@@ -101,7 +110,7 @@ int main() {
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> dist{0, 1};
-    object const& world = build_world(mt);
+    object const& world = two_perlin_spheres(mt);
     vec3 const
         from{13, 2, 3},
         at{0, 0, 0};
