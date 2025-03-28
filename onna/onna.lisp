@@ -13,7 +13,7 @@
                (* (colour-g by) (colour-g colour))
                (* (colour-b by) (colour-b colour))))
 
-(defun blend-colours (&rest colours)
+(defun blend-colours (colours)
   (when colours
     (let ((r 0) (g 0) (b 0) (l 0))
       (dolist (colour colours)
@@ -24,7 +24,7 @@
       (make-colour (/ r l) (/ g l) (/ b l)))))
 
 (defun colour-8bit (c)
-  (flet ((8bit (x) (floor (* x 255.99))))
+  (flet ((8bit (x) (floor (* 256 (alexandria:clamp x 0 0.999)))))
     (list (8bit (colour-r c)) (8bit (colour-g c)) (8bit (colour-b c)))))
 
 (defun gamma2 (c)
@@ -58,13 +58,32 @@
      (* (vec-y a) (vec-y b))
      (* (vec-z a) (vec-z b))))
 
+(defun random-vec (&optional min max)
+  (if (and min max)
+      (progn
+        (assert (< min max))
+        (flet ((random-in-range () (+ min (random (- max min)))))
+          (make-vec (random-in-range) (random-in-range) (random-in-range))))
+      (make-vec (random 1d0) (random 1d0) (random 1d0))))
+
 (defun random-in-unit-sphere ()
-  (flet ((vec-in-unit-cube ()
-           (make-vec (1- (random 2.0)) (1- (random 2.0)) (1- (random 2.0))))
-         (vec-in-unit-sphere-p (v)
-           (and (< (vec-squared-length v) 1) v)))
-    (loop for v = (vec-in-unit-cube)
-          thereis (vec-in-unit-sphere-p v))))
+  (loop for p = (random-vec -1d0 1d0)
+        as squared-length = (vec-squared-length p)
+        ;; I wonder if I'm making a non-Common Lispy assumption about the
+        ;; implementation of double-float here? This value is an approximation
+        ;; of (sqrt least-positive-double-float) which might be nicer to use?
+        ;; The book even describes numbers that, when squared, become zero as
+        ;; "fallling into a 'black hole'" so we can even call it the
+        ;; Schwarzschild value or something cute.
+        until (and (< 1d-160 squared-length) (<= squared-length 1))
+        finally (return (scaled-vec p (sqrt squared-length)))))
+
+(defun random-in-unit-hemisphere (normal)
+  ;; TODO: does anything ever use this?
+  (let ((on-unit-sphere (random-in-unit-sphere)))
+    (if (> (dot on-unit-sphere normal) 0)
+        on-unit-sphere
+        (vec- on-unit-sphere))))
 
 (defun random-in-unit-disc ()
   (flet ((vec-in-unit-disc-p (v)
@@ -72,20 +91,18 @@
     (loop for x = (1- (random 2.0))
           for y = (1- (random 2.0))
           as v = (make-vec x y 0)
-          thereis (vec-in-unit-disc-p v))))
+            thereis (vec-in-unit-disc-p v))))
 
 (defun reflect (v n)
   "Returns a new VEC corresponding to V reflected according to surface normal N"
   (vec- v (scaled-vec n (* 2 (dot v n)))))
 
-(defun refract (v n ni/nt)
+(defun refract (v n eta-i/eta-t)
   ;; Something something Snell's law?
-  (let* ((uv (unit-vec v))
-         (dt (dot uv n))
-         (discriminant (- 1 (* ni/nt ni/nt (- 1 (* dt dt))))))
-    (when (> discriminant 0)
-      (vec- (scaled-vec (vec- uv (scaled-vec n dt)) ni/nt)
-            (scaled-vec n (sqrt discriminant))))))
+  (let* ((cos-theta (min (dot (vec- v) n) 1d0))
+         (r-out-perpendicular (scaled-vec (vec+ v (scaled-vec n cos-theta)) eta-i/eta-t))
+         (r-out-parallel (scaled-vec n (- (sqrt (abs (- 1d0 (vec-squared-length r-out-perpendicular))))))))
+    (vec+ r-out-perpendicular r-out-parallel)))
 
 (declaim (ftype (function (vec double-float) vec) scaled-vec))
 (defun scaled-vec (v n)
@@ -116,6 +133,14 @@
 
 (defun unit-vec (v)
   "Returns a new VEC representing V scaled to a unit length"
+  ;; We ignore the possibility of vec-length = 0 here. This mostly isn't a
+  ;; problem because it's unlikely, and in the main program we have floating
+  ;; traps masked so we end up with a NaN which is presumably what the C++ has
+  ;; happen, but e.g. when we initialise the Perlin state, we're currently
+  ;; running code in a defparameter form which doesn't currently have the
+  ;; traps masked.
+  ;;
+  ;; TODO: think about this: mask traps there? Don't have a parameter?
   (let ((l (vec-length v)))
     (make-vec (/ (vec-x v) l)
               (/ (vec-y v) l)
@@ -124,6 +149,14 @@
 (declaim (ftype (function (vec) (values double-float &optional)) vec-length))
 (defun vec-length (v)
   (sqrt (vec-squared-length v)))
+
+(defun vec-near-zero-p (v)
+  (let ((limit 1d-8))
+    ;; This limit seems weirdly enormous? Maybe if it's *just* for catching
+    ;; degenerate Lambertian scattering it's ok?
+    (and (< (abs (vec-x v)) limit)
+         (< (abs (vec-y v)) limit)
+         (< (abs (vec-z v)) limit))))
 
 (defstruct (point (:constructor make-point (x y z &aux
                                                     (x (coerce x 'double-float))
@@ -145,10 +178,7 @@
 
 (defstruct perlin
   (random-vecs (let ((samples (make-array 256 :element-type 'vec :initial-element (make-vec 0 0 0))))
-                 (map-into samples (lambda ()
-                                     (unit-vec (make-vec (1- (random 2d0))
-                                                         (1- (random 2d0))
-                                                         (1- (random 2d0)))))))
+                 (map-into samples #'random-in-unit-sphere))
    :type (simple-array vec (256)))
   (x
    (coerce (alexandria:shuffle (alexandria:iota 256)) '(simple-array (unsigned-byte 8) (256)))
@@ -254,56 +284,60 @@
                            (max (point-z a) (point-z b))))))
     (make-aabb :min small :max big)))
 
-(declaim (ftype (function (ray aabb double-float (or double-float null)) boolean) hit-test-aabb))
-(defun hit-test-aabb (ray aabb n-min n-max &aux n-min* n-max*)
+(declaim (ftype (function (ray aabb interval) boolean) hit-test-aabb))
+(defun hit-test-aabb (ray aabb interval)
   ;; Not part of the hit-test generic function because it returns a bool
   ;; rather than a hit-record. Although it could? There's no requirement that
   ;; all the methods in a generic function return the same type?
+  (let ((n-min (interval-min interval))
+        (n-max (interval-max interval)))
+    ;; This can obviously be improved, but at the moment I don't care to do
+    ;; so. Defining a function that takes a slot name as an argument is slow;
+    ;; macros seem pretty much as complicated for this simple use case.
+    ;;
+    ;; Actually, now I'm using the infinities, this can be even more obviously
+    ;; improved.
+    (let* ((inv-d (/ 1d0 (vec-x (ray-direction ray))))
+           (t0 (* (- (point-x (aabb-min aabb))
+                     (point-x (ray-origin ray)))
+                  inv-d))
+           (t1 (* (- (point-x (aabb-max aabb))
+                     (point-x (ray-origin ray)))
+                  inv-d)))
+      (when (minusp inv-d)
+        (rotatef t0 t1))
+      (alexandria:maxf n-min t0)
+      (alexandria:minf n-max t1)
+      (when (<= n-max n-min)
+        (return-from hit-test-aabb nil)))
 
-  ;; This can obviously be improved, but at the moment I don't care to do
-  ;; so. Defining a function that takes a slot name as an argument is slow;
-  ;; macros seem pretty much as complicated for this simple use case.
-  (let* ((inv-d (/ 1d0 (vec-x (ray-direction ray))))
-         (t0 (* (- (point-x (aabb-min aabb))
-                   (point-x (ray-origin ray)))
-                inv-d))
-         (t1 (* (- (point-x (aabb-max aabb))
-                   (point-x (ray-origin ray)))
-                inv-d)))
-    (when (minusp inv-d)
-      (rotatef t0 t1))
-    (setf n-min* (max n-min t0)
-          n-max* (if (or (null n-max) (< t1 n-max)) t1 n-max))
-    (when (<= n-max* n-min*)
-      (return-from hit-test-aabb nil)))
+    (let* ((inv-d (/ 1d0 (vec-y (ray-direction ray))))
+           (t0 (* (- (point-y (aabb-min aabb))
+                     (point-y (ray-origin ray)))
+                  inv-d))
+           (t1 (* (- (point-y (aabb-max aabb))
+                     (point-y (ray-origin ray)))
+                  inv-d)))
+      (when (minusp inv-d)
+        (rotatef t0 t1))
+      (alexandria:maxf n-min t0)
+      (alexandria:minf n-max t1)
+      (when (<= n-max n-min)
+        (return-from hit-test-aabb nil)))
 
-  (let* ((inv-d (/ 1d0 (vec-y (ray-direction ray))))
-         (t0 (* (- (point-y (aabb-min aabb))
-                   (point-y (ray-origin ray)))
-                inv-d))
-         (t1 (* (- (point-y (aabb-max aabb))
-                   (point-y (ray-origin ray)))
-                inv-d)))
-    (when (minusp inv-d)
-      (rotatef t0 t1))
-    (alexandria:maxf n-min* t0)
-    (alexandria:minf n-max* t1)
-    (when (<= n-max* n-min*)
-      (return-from hit-test-aabb nil)))
-
-  (let* ((inv-d (/ 1d0 (vec-z (ray-direction ray))))
-         (t0 (* (- (point-z (aabb-min aabb))
-                   (point-z (ray-origin ray)))
-                inv-d))
-         (t1 (* (- (point-z (aabb-max aabb))
-                   (point-z (ray-origin ray)))
-                inv-d)))
-    (when (minusp inv-d)
-      (rotatef t0 t1))
-    (alexandria:maxf n-min* t0)
-    (alexandria:minf n-max* t1)
-    (when (<= n-max* n-min*)
-      (return-from hit-test-aabb nil)))
+    (let* ((inv-d (/ 1d0 (vec-z (ray-direction ray))))
+           (t0 (* (- (point-z (aabb-min aabb))
+                     (point-z (ray-origin ray)))
+                  inv-d))
+           (t1 (* (- (point-z (aabb-max aabb))
+                     (point-z (ray-origin ray)))
+                  inv-d)))
+      (when (minusp inv-d)
+        (rotatef t0 t1))
+      (alexandria:maxf n-min t0)
+      (alexandria:minf n-max t1)
+      (when (<= n-max n-min)
+        (return-from hit-test-aabb nil))))
 
   t)
 
@@ -385,52 +419,94 @@
   (n 0 :type real)
   (point (make-point 0 0 0) :type point)
   (normal (make-vec 0 0 0) :type vec)
+  ;; TODO: need to make sure this is updated for all hittables
+  front-face
   material)
 
-(defgeneric hit-test (ray object n-min &optional n-max)
+(defun set-hit-record-face-normal (hit-record ray outward-normal)
+  "Sets the normal and front-face of hit-record."
+  ;; TODO: outward-normal is assumed to have unit length, which seems like
+  ;; something types could help with? I think I saw something about predicate
+  ;; types or something too, although they're slow obviously. Or maybe just
+  ;; make the constructor smarter?
+  (with-slots (front-face normal) hit-record
+    (setf front-face (< (dot (ray-direction ray) outward-normal) 0)
+          normal (if front-face outward-normal (vec- outward-normal)))))
+
+(defstruct interval
+  ;; TODO: This is a dumb default, for example the default size is negative
+  ;; infinity. On the other hand now I've given up I should be able make some
+  ;; other code less tremendously annoying.
+  (min #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY :type double-float)
+  (max #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY :type double-float))
+
+;; TODO: I'll be these want to be inlined on account of how SBCL boxes floats.
+(defun interval-size (i)
+  (- (interval-max i) (interval-min i)))
+
+(defun interval-contains (i x)
+  (<= (interval-min i) x (interval-max i)))
+
+(defun interval-surrounds (i x)
+  (< (interval-min i) x (interval-max i)))
+
+(defun interval-clamp (i x)
+  (cond
+    ((< x (interval-min i)) (interval-min i))
+    ((> x (interval-max i)) (interval-max i))
+    (x)))
+
+;; TODO: defconst?
+(defun universal-interval ()
+  (make-interval :min #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY
+                 :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))
+
+(defgeneric hit-test (ray object interval)
   (:documentation "Tests OBJECT for a hit from RAY between N-MIN and N-MAX, returning a hit-record."))
 
-(defun hit-test-sphere (ray sphere n-min n-max)
+(defun hit-test-sphere (ray sphere interval)
   (let* ((sphere-centre (sphere-centre-at sphere (ray-time ray)))
-         (oc (point-difference (ray-origin ray) sphere-centre))
-         (a (dot (ray-direction ray) (ray-direction ray)))
-         (b (dot oc (ray-direction ray)))
-         (c (- (dot oc oc) (* (sphere-radius sphere) (sphere-radius sphere))))
-         (discriminant (- (* b b) (* a c))))
+         (oc (point-difference sphere-centre (ray-origin ray)))
+         (a (vec-squared-length (ray-direction ray)))
+         (h (dot (ray-direction ray) oc))
+         (c (- (vec-squared-length oc) (* (sphere-radius sphere) (sphere-radius sphere))))
+         (discriminant (- (* h h) (* a c))))
     (when (> discriminant 0)
-      (labels ((root-in-bounds (root)
-                 (if (null n-max)
-                     (< (the double-float n-min) root)
-                     (< (the double-float n-min) root (the double-float n-max))))
-               (point-at-parameter (r n)
+      (labels ((point-at-parameter (r n)
                  (offset-point (ray-origin r) (scaled-vec (ray-direction r) n)))
                (hit-record-for-root (root)
                  (let* ((hit-point (point-at-parameter ray root))
-                        (normal (unit-vec (scaled-vec (point-difference hit-point sphere-centre) (sphere-radius sphere)))))
-                   (make-hit-record :n root :point hit-point :normal normal :material (sphere-material sphere)))))
-        (let ((root (/ (- (- b) (sqrt discriminant)) a)))
-          (if (root-in-bounds root)
+                        (outward-normal (scaled-vec (point-difference hit-point sphere-centre) (/ (sphere-radius sphere))))
+                        (hit-record (make-hit-record :n root :point hit-point :material (sphere-material sphere))))
+                   (set-hit-record-face-normal hit-record ray outward-normal)
+                   hit-record)))
+        (let* ((sqrt-discriminant (sqrt discriminant))
+               (root (/ (- h sqrt-discriminant) a)))
+          (if (interval-surrounds interval root)
               (hit-record-for-root root)
               (progn
-                (setf root (/ (+ (- b) (sqrt discriminant)) a))
-                (when (root-in-bounds root) (hit-record-for-root root)))))))))
+                (setf root (/ (+ h sqrt-discriminant) a))
+                (when (interval-surrounds interval root) (hit-record-for-root root)))))))))
 
-(defmethod hit-test (ray (sphere sphere) n-min &optional n-max)
-  (hit-test-sphere ray sphere n-min n-max))
+(defmethod hit-test (ray (sphere sphere) interval)
+  (hit-test-sphere ray sphere interval))
 
-(defun hit-test-seq (ray objects n-min n-max)
+(defun hit-test-seq (ray objects interval)
   (let (closest)
     (dotimes (i (length objects) closest)
-      (alexandria:when-let ((hit (hit-test ray (elt objects i) n-min (if closest (hit-record-n closest) n-max))))
+      (alexandria:when-let ((hit (hit-test ray (elt objects i) (if closest
+                                                                   (make-interval :min (interval-min interval)
+                                                                                  :max (hit-record-n closest))
+                                                                   interval))))
         (setf closest hit)))))
 
-(defmethod hit-test (ray (objects sequence) n-min &optional n-max)
-  (hit-test-seq ray objects n-min n-max))
+(defmethod hit-test (ray (objects sequence) interval)
+  (hit-test-seq ray objects interval))
 
-(defun hit-test-node (ray node n-min n-max)
+(defun hit-test-node (ray node interval)
   (when (let ((box (bvh-node-box node)))
-          (and box (hit-test-aabb ray box n-min n-max)))
-    (flet ((sub-hit (sub) (and sub (hit-test ray sub n-min n-max))))
+          (and box (hit-test-aabb ray box interval)))
+    (flet ((sub-hit (sub) (and sub (hit-test ray sub interval))))
       (let ((left-hit (sub-hit (bvh-node-left node)))
             (right-hit (sub-hit (bvh-node-right node))))
         (cond
@@ -439,8 +515,8 @@
           (left-hit)
           (right-hit))))))
 
-(defmethod hit-test (ray (node bvh-node) n-min &optional n-max)
-  (hit-test-node ray node n-min n-max))
+(defmethod hit-test (ray (node bvh-node) interval)
+  (hit-test-node ray node interval))
 
 (defgeneric bounding-box (object t0 t1)
   (:documentation "Returns the axis-aligned bounding box (AABB) of OBJECT between times t0 and t1."))
@@ -515,20 +591,77 @@
                                (vec- offset))
               :time (coerce (alexandria:lerp (random 1.0) (camera-t0 camera) (camera-t1 camera)) 'double-float))))
 
+(defstruct (book-camera (:constructor nil))
+  (centre (make-point 0 0 0) :type point)
+  ;; Vectors across the horizontal and down the vertical viewport edges.
+  (viewport-u (make-vec 0 0 0) :type vec)
+  (viewport-v (make-vec 0 0 0) :type vec)
+  ;; Upper-left corner of the viewport
+  (viewport-upper-left (make-point 0 0 0) :type point)
+  ;; Defocus disc horizontal and vertical radius.
+  (defocus-disc-u nil :type (or null vec))
+  (defocus-disc-v nil :type (or null vec)))
+(defun make-book-camera (&key
+                           (from (make-point 0 0 0))
+                           (at (make-point 0 0 -1))
+                           (up (make-vec 0 1 0))
+                           ;; Vertical field of view, degrees.
+                           (vertical-fov 90)
+                           (aspect-ratio 1)
+                           ;; Variation of angle of rays through each pixel, degrees.
+                           (defocus-angle 0)
+                           ;; Distance from camera to plane of perfect focus.
+                           (focus-distance 10))
+  (setf focus-distance (coerce focus-distance 'double-float))
+  ;; defocus-angle used to be lens-radius, which I think I like more?
+  (let* ((camera (make-instance 'book-camera))
+         (theta (/ (* vertical-fov pi) 180))
+         (viewport-height (* 2 (tan (/ theta 2)) focus-distance))
+         (viewport-width (* viewport-height aspect-ratio))
+         ;; The u, v, w vectors are the dimensional unit basis vectors for the
+         ;; camera co-ordinate frame.
+         (w (unit-vec (point-difference from at)))
+         (u (unit-vec (cross up w)))
+         (v (unit-vec (cross w u))))
+    (with-slots (centre viewport-u viewport-v viewport-upper-left) camera
+      (setf centre from
+            viewport-u (scaled-vec u viewport-width)
+            viewport-v (scaled-vec (vec- v) viewport-height)
+            viewport-upper-left (let ((offset (vec+ (scaled-vec w focus-distance)
+                                                    (scaled-vec viewport-u (/ 2d0))
+                                                    (scaled-vec viewport-v (/ 2d0)))))
+                                  (offset-point centre (vec- offset)))))
+    (let ((defocus-radius (* focus-distance (tan (/ (* (/ defocus-angle 2) pi) 180)))))
+      (unless (= defocus-radius 0)
+        (setf (book-camera-defocus-disc-u camera) (scaled-vec u defocus-radius)
+              (book-camera-defocus-disc-v camera) (scaled-vec v defocus-radius))))
+    camera))
+(defun get-book-camera-ray (camera pixel-centre)
+  (let* ((origin (let ((centre (book-camera-centre camera)))
+                   (alexandria:if-let ((u (book-camera-defocus-disc-u camera))
+                                       (v (book-camera-defocus-disc-v camera)))
+                     (let ((p (random-in-unit-disc)))
+                       (offset-point centre (vec+ (scaled-vec u (vec-x p)) (scaled-vec v (vec-y p)))))
+                     centre)))
+         (ray-direction (point-difference pixel-centre origin)))
+    (make-ray :origin origin :direction ray-direction)))
+
 (defstruct scatter-record
   (attenuation (make-colour 0 0 0) :type colour)
   (scatter-ray (make-ray) :type ray))
 
-(defgeneric scatter* (material ray-in hit-point hit-normal)
+(defgeneric scatter* (material ray-in hit-point hit-normal hit-front-face)
   (:documentation "Materail; scatters RAY-IN at HIT and returns a scatter-record"))
 
 (defun scatter (ray-in hit)
-  (scatter* (hit-record-material hit) ray-in (hit-record-point hit) (hit-record-normal hit)))
+  (scatter* (hit-record-material hit) ray-in (hit-record-point hit) (hit-record-normal hit) (hit-record-front-face hit)))
 
 (defstruct lambertian (albedo (make-colour 0 0 0)))
 
-(defmethod scatter* ((material lambertian) ray-in hit-point hit-normal)
-  (let ((target (offset-point hit-point (vec+ hit-normal (random-in-unit-sphere)))))
+(defmethod scatter* ((material lambertian) ray-in hit-point hit-normal hit-front-face)
+  (let* ((scatter-direction (let ((s (vec+ hit-normal (random-in-unit-sphere))))
+                             (if (vec-near-zero-p s) hit-normal s)))
+         (target (offset-point hit-point scatter-direction)))
     (make-scatter-record :attenuation (texture-value (lambertian-albedo material) 0 0 hit-point)
                          :scatter-ray (make-ray :origin hit-point
                                                 :direction (point-difference target hit-point)
@@ -538,53 +671,55 @@
   (albedo (make-colour 0 0 0) :type colour)
   (fuzz 0d0 :type (double-float 0d0 1d0)))
 
-(defmethod scatter* ((material metal) ray-in hit-point hit-normal)
-  (let* ((reflected (reflect (unit-vec (ray-direction ray-in)) hit-normal))
+(defmethod scatter* ((material metal) ray-in hit-point hit-normal hit-front-face)
+  (let* ((reflected (reflect (ray-direction ray-in) hit-normal))
          (scattered (make-ray :origin hit-point
-                              :direction (vec+ reflected
+                              :direction (vec+ (unit-vec reflected)
                                                (scaled-vec (random-in-unit-sphere)
                                                            (metal-fuzz material)))
                               :time (ray-time ray-in))))
-    (when (> (dot reflected hit-normal) 0)
+    ;; BROKEN: This is what the book says, and it's fucked?
+    (when (> (dot scattered hit-normal) 0)
       (make-scatter-record :attenuation (metal-albedo material)
                            :scatter-ray scattered))))
 
 (defstruct (dielectric (:constructor
-                           make-dielectric (&key refractive-index &aux
-                                                                    (refractive-index (coerce refractive-index 'double-float)))))
+                           make-dielectric
+                           (&key refractive-index
+                            &aux (refractive-index (coerce refractive-index 'double-float)))))
+  ;; The ratio of the material's refractive index over the refractive index of
+  ;; the enclosing media.
   (refractive-index 0 :type double-float))
 
-(defun schlick (cosine ref-idx)
+(defun reflectance (cosine ref-idx)
+  "Schlick's approximation for reflectance."
   (let ((r0 (/ (- 1 ref-idx) (+ 1 ref-idx))))
     (setf r0 (* r0 r0))
     (+ r0 (* (- 1 r0) (expt (- 1 cosine) 5)))))
 
-(defmethod scatter* ((material dielectric) ray-in hit-point hit-normal)
-  (let ((ref-idx (dielectric-refractive-index material))
-        (attenuation (make-colour 1 1 1)))
-    (destructuring-bind (outward-normal ni/nt cosine)
-        (if (> (dot (ray-direction ray-in) hit-normal) 0)
-            (list (vec- hit-normal)
-                  ref-idx
-                  (/ (* ref-idx (dot (ray-direction ray-in) hit-normal))
-                     (vec-length (ray-direction ray-in))))
-            (list hit-normal
-                  (/ 1 ref-idx)
-                  (/ (- (dot (ray-direction ray-in) hit-normal))
-                     (vec-length (ray-direction ray-in)))))
-      (let* ((refracted (refract (ray-direction ray-in) outward-normal ni/nt))
-             (scatter-direction (if (or (null refracted) (< (random 1.0) (schlick cosine ref-idx)))
-                                    (reflect (ray-direction ray-in) hit-normal)
-                                    refracted)))
-        (make-scatter-record :attenuation attenuation
-                             :scatter-ray (make-ray :origin hit-point
-                                                    :direction scatter-direction
-                                                    :time (ray-time ray-in)))))))
+(defmethod scatter* ((material dielectric) ray-in hit-point hit-normal hit-front-face)
+  (let* ((attenuation (make-colour 1 1 1))
+         (ref-idx (let ((r (dielectric-refractive-index material)))
+                    (if hit-front-face (/ r) r)))
+         (unit-direction (unit-vec (ray-direction ray-in)))
+         (cos-theta (min (dot (vec- unit-direction) hit-normal) 1d0))
+         (sin-theta (sqrt (- 1d0 (* cos-theta cos-theta))))
+         (cannot-refract (> (* ref-idx sin-theta) 1d0))
+         (scatter-direction (if (or cannot-refract (> (reflectance cos-theta ref-idx) (random 1d0)))
+                                (reflect unit-direction hit-normal)
+                                (refract unit-direction hit-normal ref-idx))))
+    (make-scatter-record :attenuation attenuation
+                         :scatter-ray (make-ray :origin hit-point
+                                                :direction scatter-direction
+                                                :time (ray-time ray-in)))))
 
-(defparameter *ray-recursion-depth-limit* 50)
+;; TODO: This was 50 before! I wonder how much of a difference it makes.
+;; TODO: In the book, this is a property of the camera, but that doesn't
+;; really match how I want things to be.
+(defparameter *ray-recursion-depth-limit* 10)
 
 (defun ray-colour (r world depth)
-  (alexandria:if-let ((hit (hit-test r world 0.001d0 nil)))
+  (alexandria:if-let ((hit (hit-test r world (make-interval :min 0.001d0 :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
     (let ((scatter (scatter r hit)))
       (if (and (< depth *ray-recursion-depth-limit*) scatter)
           (attenuate (scatter-record-attenuation scatter)
@@ -596,7 +731,7 @@
 
 (defparameter *antialiasing-sample-count* 10)
 
-(defparameter *scene* (vector (make-sphere :centre (make-point 0 0 -1)
+(defparameter *scene* (vector (make-sphere :centre (make-point 0 0 -1.2)
                                            :radius 0.5
                                            :material (make-lambertian :albedo (make-colour 0.1 0.2 0.5)))
                               (make-sphere :centre (make-point 0 -100.5 -1)
@@ -605,12 +740,12 @@
                               (make-sphere :centre (make-point 1 0 -1)
                                            :radius 0.5
                                            :material (make-metal :albedo (make-colour 0.8 0.6 0.2)
-                                                                 :fuzz 0.1))
+                                                                 :fuzz 1.0))
                               (make-sphere :centre (make-point -1 0 -1)
                                            :radius 0.5
                                            :material (make-dielectric :refractive-index 1.5))
                               (make-sphere :centre (make-point -1 0 -1)
-                                           :radius -0.45
+                                           :radius -0.4
                                            :material (make-dielectric :refractive-index 1.5))))
 
 (defun test-scene ()
@@ -667,7 +802,7 @@
 
     (coerce list 'vector)))
 
-(defun test-image (nx ny)
+(defun test-image (image-width image-height)
   ;; There's also :invalid to handle (quiet) NaNs, which the book mentions we
   ;; may encounter at some point. There are also predicates for the "fun"
   ;; floating-point values in SB-EXT. There are also reader literals e.g.
@@ -678,33 +813,75 @@
   ;; the main thread or something, which, yikes, so I guess we might fix it
   ;; differently one day).
   (sb-int:with-float-traps-masked (:divide-by-zero)
-    (let ((a (make-array (list ny nx) :element-type 'colour :initial-element (make-colour 0 0 0)))
-          (camera (let ((from (make-point 13 2 3))
-                        (at (make-point 0 0 0)))
-                    (make-camera :from from
-                                 :at at
-                                 :vertical-fov 20
-                                 :aspect-ratio (/ nx ny)
-                                 :lens-radius 0
-                                 :focus-distance 10
-                                 :t0 0
-                                 :t1 1))))
-      (loop for j below ny do
-        (loop for i below nx do
-          (let (samples)
-            (dotimes (s *antialiasing-sample-count*)
-              (let* ((u (/ (+ i (random 1d0)) nx))
-                     (v (/ (+ j (random 1d0)) ny))
-                     (r (get-ray camera u v)))
-                (push (ray-colour r *scene* 0) samples)))
-            (setf (aref a j i) (apply #'blend-colours samples)))))
+    (let* ((a (make-array (list image-height image-width)
+                          :element-type 'colour
+                          :initial-element (make-colour 0 0 0)))
+           ;; (camera (make-camera :from (make-point 13 2 3)
+           ;;                      :at (make-point 0 0 0)
+           ;;                      :vertical-fov 20
+           ;;                      :aspect-ratio (/ image-width image-height)
+           ;;                      :lens-radius 0
+           ;;                      :focus-distance 10
+           ;;                      :t0 0
+           ;;                      :t1 1))
+           (camera (make-camera :from (make-point -2 2 1)
+                                :at (make-point 0 0 -10)
+                                :vertical-fov 20
+                                :aspect-ratio (/ image-width image-height)
+                                :lens-radius 0
+                                :focus-distance 3.4d0
+                                :t0 0
+                                :t1 1))
+           (book-camera (make-book-camera :from (make-point -2 2 1)
+                                          :at (make-point 0 0 -1)
+                                          :vertical-fov 20
+                                          :aspect-ratio (/ image-width image-height)
+                                          ;; :defocus-angle 10
+                                          ;; :focus-distance 3.4
+                                          ))
+           (pixel-delta-u (scaled-vec (book-camera-viewport-u book-camera)
+                                      (/ (coerce image-width 'double-float))))
+           (pixel-delta-v (scaled-vec (book-camera-viewport-v book-camera)
+                                      (/ (coerce image-height 'double-float))))
+           (pixel-0-0-loc (offset-point (book-camera-viewport-upper-left book-camera)
+                                        (scaled-vec (vec+ pixel-delta-u pixel-delta-v) 0.5d0))))
+      (flet ((sample-pixel (i j)
+               (let* ((u (/ (+ i (random 1d0)) image-width))
+                      (v (/ (+ j (random 1d0)) image-height))
+                      (r (get-ray camera u v)))
+                 (ray-colour r *scene* 0)))
+             (book-camera-sample-pixel (i j)
+               (labels ((sample-square ()
+                          ;; I'm not sure this is better? On the other hand, I
+                          ;; did literally earlier today see an interesting
+                          ;; looking paper called "A pixel is not a little
+                          ;; square" or something similar, and the book
+                          ;; suggests changing this sample-disk to experiment
+                          ;; with non-square pixels.
+                          (make-vec (- (random 1d0) 0.5) (- (random 1d0) 0.5) 0)))
+                 (let* ((offset (sample-square))
+                        (i* (+ (coerce i 'double-float) (vec-x offset)))
+                        (j* (+ (coerce j 'double-float) (vec-y offset)))
+                        (pixel-centre (offset-point pixel-0-0-loc (vec+ (scaled-vec pixel-delta-u i*)
+                                                                        (scaled-vec pixel-delta-v j*))))
+                        (r (get-book-camera-ray book-camera pixel-centre)))
+                   (ray-colour r *scene* 0)))))
+        (loop for j below image-height do
+          ;; TODO: the book has a thing that prints out the scanlines here,
+          ;; but they use carriage returns to just do it on a single updating
+          ;; line. Not sure what a good equivalent for this would be? I
+          ;; haven't felt that it's necessary so far.
+          (loop for i below image-width do
+            (loop repeat *antialiasing-sample-count*
+                  collect (book-camera-sample-pixel i j) into samples
+                  finally (setf (aref a j i) (blend-colours samples))))))
       a)))
 
 (defun write-image (image)
   "Writes an image in PPM format to *standard-output*."
-  (destructuring-bind (ny nx) (array-dimensions image)
-    (format t "P3~%~D ~D~%255~%" nx ny)
-    (loop for j from (1- ny) downto 0 do
-      (loop for i from 0 below nx do
-        (destructuring-bind (ir ig ib) (colour-8bit (gamma2 (aref image j i)))
-          (format t "~D ~D ~D~%" ir ig ib))))))
+  (destructuring-bind (image-height image-width) (array-dimensions image)
+    (format t "P3~%~D ~D~%255~%" image-width image-height)
+    (loop for j from 0 below image-height do
+      (loop for i from 0 below image-width
+            as (ir ig ib) = (colour-8bit (gamma2 (aref image j i)))
+            do (format t "~D ~D ~D~%" ir ig ib)))))
