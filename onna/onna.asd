@@ -6,6 +6,8 @@
   :license "MIT"
   :version "0.0.1"
   :components ((:file "package")
-               (:file "onna"))
+               (:file "colour" :depends-on ("package"))
+               (:file "image" :depends-on ("package" "colour"))
+               (:file "onna" :depends-on ("package" "image")))
   :depends-on (:alexandria
                :random-state))
