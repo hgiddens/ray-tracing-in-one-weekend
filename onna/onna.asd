@@ -8,6 +8,7 @@
   :components ((:file "package")
                (:file "colour" :depends-on ("package"))
                (:file "image" :depends-on ("package" "colour"))
+               (:file "vec" :depends-on ("package"))
                (:file "onna" :depends-on ("package" "image")))
   :depends-on (:alexandria
                :random-state))
