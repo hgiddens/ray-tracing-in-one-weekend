@@ -71,3 +71,16 @@
                          (y (coerce y 'double-float))
                          (z (coerce z 'double-float))))
                   (:include vec3)))
+
+(defun point+ (p &rest vs)
+  "The point offset from point P by vectors VS."
+  (let ((v (apply #'vec3+ vs)))
+    (make-point (+ (point-x p) (vec3-x v))
+                (+ (point-y p) (vec3-y v))
+                (+ (point-z p) (vec3-z v)))))
+
+(defun point- (a b)
+  "The vector representing A - B."
+  (make-vec3 (- (point-x a) (point-x b))
+             (- (point-y a) (point-y b))
+             (- (point-z a) (point-z b))))

@@ -7,8 +7,10 @@
   :version "0.0.1"
   :components ((:file "package")
                (:file "colour" :depends-on ("package"))
-               (:file "image" :depends-on ("package" "colour"))
+               (:file "image" :depends-on ("package" "colour" "camera"))
                (:file "vec" :depends-on ("package"))
+               (:file "ray" :depends-on ("package" "vec"))
+               (:file "camera" :depends-on ("package" "vec" "ray" "colour"))
                (:file "onna" :depends-on ("package" "image")))
   :depends-on (:alexandria
                :random-state))
