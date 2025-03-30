@@ -71,6 +71,16 @@
         until (and (< 1d-160 length-squared) (<= length-squared 1d0))
         finally (return (scaled-vec3 p (/ (sqrt length-squared))))))
 
+(defun near-zero-vec3-p (v)
+  (let ((threshold 1d-8)) ; TODO: defconstant?
+    (and (< (abs (vec3-x v)) threshold)
+         (< (abs (vec3-y v)) threshold)
+         (< (abs (vec3-z v)) threshold))))
+
+(defun reflect (v n)
+  "Reflects vector V with regard to surface normal N."
+  (vec3- v (scaled-vec3 n (* 2 (dot-product v n)))))
+
 ;;; As in the book, points are vec3s, but a little more type safe here.
 (defstruct (point3 (:constructor make-point3
                        (x y z

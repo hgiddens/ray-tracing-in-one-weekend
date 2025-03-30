@@ -29,3 +29,8 @@
   ;; square root of al the components.
   (with-slots (r g b) c
     (make-colour (sqrt r) (sqrt g) (sqrt b))))
+
+(defun attenuate (c d)
+  (make-colour (* (colour-r c) (colour-r d))
+               (* (colour-g c) (colour-g d))
+               (* (colour-b c) (colour-b d))))

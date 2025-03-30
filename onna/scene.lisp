@@ -4,7 +4,7 @@
 
 (defstruct (hit-record
             (:constructor make-hit-record
-                (&key ray point outward-normal time
+                (&key ray point outward-normal time material
                  &aux
                    (front-face (< (dot-product (ray-direction ray) outward-normal) 0))
                    (normal (if front-face outward-normal (vec3- outward-normal))))))
@@ -12,7 +12,8 @@
   ;; The normal, facing against the incident ray
   (normal (make-vec3 0 0 0) :type vec3)
   (time 0d0 :type double-float)
-  front-face)
+  front-face
+  material)
 
 ;;; TODO: I probably want to do the monomorphisation I did before, but I
 ;;; wonder if there's a way to automatically do it and/or whether it's
@@ -39,10 +40,11 @@ Returns a `hit-record' or `nil'."))
 
 (defstruct (sphere
             (:constructor make-sphere
-                (&key centre radius
+                (&key centre radius material
                  &aux (radius (coerce radius 'double-float)))))
   (centre (make-point3 0 0 0) :type point3)
-  (radius 0d0 :type (double-float 0d0)))
+  (radius 0d0 :type (double-float 0d0))
+  material)
 
 (defmethod hit-test (ray (sphere sphere) ray-interval)
   (flet ((hit-record-for-root (root)
@@ -52,7 +54,8 @@ Returns a `hit-record' or `nil'."))
               :point hit-point
               :outward-normal (scaled-vec3 (point3- hit-point (sphere-centre sphere))
                                            (/ (sphere-radius sphere)))
-              :time root))))
+              :time root
+              :material (sphere-material sphere)))))
     (let* ((oc (point3- (sphere-centre sphere) (ray-origin ray)))
            (a (vec3-length-squared (ray-direction ray)))
            (h (dot-product (ray-direction ray) oc))

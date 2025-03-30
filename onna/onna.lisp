@@ -6,7 +6,7 @@
   ;; well with this being run primarily from Slime.
   (let* ((camera (make-camera :samples-per-pixel 100
                               :max-depth 50))
-         (world (two-spheres))
+         (world (four-spheres))
          (image (time (render camera world))))
     (with-open-file (stream #P"~/Desktop/test.ppm"
                             :direction :output

@@ -12,7 +12,8 @@
                (:file "ray" :depends-on ("package" "vec"))
                (:file "camera" :depends-on ("package" "vec" "ray" "colour" "image"))
                (:file "scene" :depends-on ("package" "ray" "vec"))
-               (:file "scenes" :depends-on ("package" "scene"))
-               (:file "onna" :depends-on ("package" "image")))
+               (:file "material" :depends-on ("package" "vec" "colour"))
+               (:file "scenes" :depends-on ("package" "scene" "vec" "material"))
+               (:file "onna" :depends-on ("package" "camera" "scenes" "image")))
   :depends-on (:alexandria
                :random-state))
