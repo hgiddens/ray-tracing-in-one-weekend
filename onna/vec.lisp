@@ -64,26 +64,26 @@
   (scaled-vec3 v (/ (vec3-length v))))
 
 ;;; As in the book, points are vec3s, but a little more type safe here.
-(defstruct (point (:constructor make-point
-                      (x y z
-                       &aux
-                         (x (coerce x 'double-float))
-                         (y (coerce y 'double-float))
-                         (z (coerce z 'double-float))))
-                  (:include vec3)))
+(defstruct (point3 (:constructor make-point3
+                       (x y z
+                        &aux
+                          (x (coerce x 'double-float))
+                          (y (coerce y 'double-float))
+                          (z (coerce z 'double-float))))
+                   (:include vec3)))
 
-(defun point+ (p &rest vs)
+(defun point3+ (p &rest vs)
   "The point offset from point P by vectors VS."
   (let ((v (apply #'vec3+ vs)))
-    (make-point (+ (point-x p) (vec3-x v))
-                (+ (point-y p) (vec3-y v))
-                (+ (point-z p) (vec3-z v)))))
+    (make-point3 (+ (point3-x p) (vec3-x v))
+                 (+ (point3-y p) (vec3-y v))
+                 (+ (point3-z p) (vec3-z v)))))
 
-(defun point- (a b)
+(defun point3- (a b)
   "The vector representing A - B."
-  (make-vec3 (- (point-x a) (point-x b))
-             (- (point-y a) (point-y b))
-             (- (point-z a) (point-z b))))
+  (make-vec3 (- (point3-x a) (point3-x b))
+             (- (point3-y a) (point3-y b))
+             (- (point3-z a) (point3-z b))))
 
 ;;; This doesn't really have anything to do with vectors but I guess it
 ;;; doesn't not make sense here, if you consider this a generic "math

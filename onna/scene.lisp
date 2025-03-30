@@ -8,7 +8,7 @@
                  &aux
                    (front-face (< (dot-product (ray-direction ray) outward-normal) 0))
                    (normal (if front-face outward-normal (vec3- outward-normal))))))
-  (point (make-point 0 0 0) :type point)
+  (point (make-point3 0 0 0) :type point3)
   ;; The normal, facing against the incident ray
   (normal (make-vec3 0 0 0) :type vec3)
   (time 0d0 :type double-float)
@@ -41,7 +41,7 @@ Returns a `hit-record' or `nil'."))
             (:constructor make-sphere
                 (&key centre radius
                  &aux (radius (coerce radius 'double-float)))))
-  (centre (make-point 0 0 0) :type point)
+  (centre (make-point3 0 0 0) :type point3)
   (radius 0d0 :type (double-float 0d0)))
 
 (defmethod hit-test (ray (sphere sphere) ray-interval)
@@ -50,10 +50,10 @@ Returns a `hit-record' or `nil'."))
              (make-hit-record
               :ray ray
               :point hit-point
-              :outward-normal (scaled-vec3 (point- hit-point (sphere-centre sphere))
+              :outward-normal (scaled-vec3 (point3- hit-point (sphere-centre sphere))
                                            (/ (sphere-radius sphere)))
               :time root))))
-    (let* ((oc (point- (sphere-centre sphere) (ray-origin ray)))
+    (let* ((oc (point3- (sphere-centre sphere) (ray-origin ray)))
            (a (vec3-length-squared (ray-direction ray)))
            (h (dot-product (ray-direction ray) oc))
            (c (- (vec3-length-squared oc) (* (sphere-radius sphere) (sphere-radius sphere))))

@@ -16,18 +16,18 @@
 ;;;; much.
 
 (defstruct (camera (:constructor nil))
-  (centre (make-point 0 0 0) :type point)
+  (centre (make-point3 0 0 0) :type point3)
   (image-width 0 :type (integer 0))
   (image-height 0 :type (integer 0))
   (pixel-delta-u (make-vec3 0 0 0) :type vec3)
   (pixel-delta-v (make-vec3 0 0 0) :type vec3)
-  (pixel-0-0-loc (make-point 0 0 0) :type point))
+  (pixel-0-0-loc (make-point3 0 0 0) :type point3))
 
 (defun make-camera (&key (aspect-ratio (/ 16 9)) (image-width 400))
   (setf aspect-ratio (coerce aspect-ratio 'double-float))
   (let* ((camera (make-instance 'camera))
          (image-height (max (round image-width aspect-ratio) 1))
-         (centre (make-point 0 0 0))
+         (centre (make-point3 0 0 0))
 
          ;; Viewport dimensions.
          (focal-length 1d0)
@@ -44,12 +44,12 @@
 
          ;; Upper left pixel location.
          (viewport-upper-left (let ((offset (vec3+ (make-vec3 0 0 (- focal-length))
-                                                     (scaled-vec3 viewport-u (/ -2d0))
-                                                     (scaled-vec3 viewport-v (/ -2d0)))))
-                                  (point+ centre offset)))
-         (pixel-0-0-loc (point+ viewport-upper-left
-                                  (scaled-vec3 pixel-delta-u 0.5d0)
-                                  (scaled-vec3 pixel-delta-v 0.5d0))))
+                                                   (scaled-vec3 viewport-u (/ -2d0))
+                                                   (scaled-vec3 viewport-v (/ -2d0)))))
+                                (point3+ centre offset)))
+         (pixel-0-0-loc (point3+ viewport-upper-left
+                                 (scaled-vec3 pixel-delta-u 0.5d0)
+                                 (scaled-vec3 pixel-delta-v 0.5d0))))
     (setf (camera-centre camera) centre
           (camera-image-width camera) image-width
           (camera-image-height camera) image-height
@@ -78,10 +78,10 @@
                             :initial-element (make-colour 0 0 0))))
     (loop for j from 0 below (camera-image-height camera) do
       (loop for i from 0 below (camera-image-width camera)
-            as pixel-centre = (point+ (camera-pixel-0-0-loc camera)
-                                      (scaled-vec3 (camera-pixel-delta-u camera) (coerce i 'double-float))
-                                      (scaled-vec3 (camera-pixel-delta-v camera) (coerce j 'double-float)))
+            as pixel-centre = (point3+ (camera-pixel-0-0-loc camera)
+                                       (scaled-vec3 (camera-pixel-delta-u camera) (coerce i 'double-float))
+                                       (scaled-vec3 (camera-pixel-delta-v camera) (coerce j 'double-float)))
             as ray = (make-ray :origin (camera-centre camera)
-                               :direction (point- pixel-centre (camera-centre camera)))
+                               :direction (point3- pixel-centre (camera-centre camera)))
             do (setf (aref image j i) (ray-colour ray world))))
     image))
