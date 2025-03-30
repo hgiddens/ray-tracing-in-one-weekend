@@ -84,3 +84,31 @@
   (make-vec3 (- (point-x a) (point-x b))
              (- (point-y a) (point-y b))
              (- (point-z a) (point-z b))))
+
+;;; This doesn't really have anything to do with vectors but I guess it
+;;; doesn't not make sense here, if you consider this a generic "math
+;;; primitives" dumping ground.
+(defstruct (interval (:constructor make-interval
+                       (&key min max
+                        &aux
+                          (min (coerce min 'double-float))
+                          (max (coerce max 'double-float)))))
+  ;; These are stupid defaults because it means the default interval is
+  ;; simultaneously empty and infinitely large (due to the implementation of
+  ;; interval::size in the C++. I'm assuming we won't care about the size of
+  ;; an interval for a while though, so I just won't implement that.
+  (min #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY :type double-float)
+  (max #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY :type double-float))
+
+(defun interval-contains (i x)
+  (declare (type double-float x))
+  (<= (interval-min i) x (interval-max i)))
+
+(defun interval-surrounds (i x)
+  (declare (type double-float x))
+  (< (interval-min i) x (interval-max i)))
+
+;;; TODO: defconst? But let's see how it's used first?
+(defun universe-interval ()
+  (make-interval :min #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY
+                 :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))

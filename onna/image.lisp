@@ -24,23 +24,25 @@ not necessarily unique due to e.g. antialiasing."
                 (scaled-vec3 pixel-delta-v (coerce j 'double-float)))))))
 
 (defun test-image (image-width image-height)
-  "Fixed sphere against a gradient background."
-  (labels ((hit-sphere (centre radius ray)
-             (let* ((oc (point- centre (ray-origin ray)))
-                    (a (dot-product (ray-direction ray) (ray-direction ray)))
-                    (b (* -2d0 (dot-product (ray-direction ray) oc)))
-                    (c (- (dot-product oc oc) (* radius radius)))
-                    (discriminant (- (* b b) (* 4 a c))))
-               (>= discriminant 0)))
-           (ray-colour (ray)
-             (if (hit-sphere (make-point 0 0 -1) 0.5 ray)
-                 (make-colour 1 0 0)
-                 (let* ((unit-direction (unit-vec3 (ray-direction ray)))
-                        (a (* 0.5 (1+ (vec3-y unit-direction)))))
-                   (make-colour (alexandria:lerp a 1 0.5)
-                                (alexandria:lerp a 1 0.7)
-                                1)))))
-    (let* ((camera (make-camera (/ image-width image-height)))
+  "Fixed spheres with normals against a gradient background."
+  (flet ((ray-colour (ray world)
+           (let ((interval (make-interval
+                            :min 0
+                            :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
+             (alexandria:if-let ((hit (hit-test ray world interval)))
+               (let ((normal (hit-record-normal hit)))
+                 (make-colour (* 0.5 (1+ (vec3-x normal)))
+                              (* 0.5 (1+ (vec3-y normal)))
+                              (* 0.5 (1+ (vec3-z normal)))))
+               (let* ((unit-direction (unit-vec3 (ray-direction ray)))
+                      (a (* 0.5 (1+ (vec3-y unit-direction)))))
+                 (make-colour (alexandria:lerp a 1 0.5)
+                              (alexandria:lerp a 1 0.7)
+                              1))))))
+    (let* ((world (vector
+                   (make-sphere :centre (make-point 0 0 -1) :radius 0.5)
+                   (make-sphere :centre (make-point 0 -100.5 -1) :radius 100)))
+           (camera (make-camera (/ image-width image-height)))
            (image (make-array (list image-height image-width)
                               :element-type 'colour
                               :initial-element (make-colour 0 0 0)))
@@ -48,7 +50,7 @@ not necessarily unique due to e.g. antialiasing."
       (loop for j from 0 below image-height do
         (loop for i from 0 below image-width do
           (setf (aref image j i)
-                (ray-colour (get-ray camera (funcall vc-mapper i j))))))
+                (ray-colour (get-ray camera (funcall vc-mapper i j)) world))))
       image)))
 
 (defun write-ppm (image &optional (stream *standard-output*))
