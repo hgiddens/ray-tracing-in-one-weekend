@@ -112,3 +112,7 @@
 (defun universe-interval ()
   (make-interval :min #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY
                  :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))
+
+(defun clamp-to-interval (i d)
+  (declare (type double-float d))
+  (alexandria:clamp d (interval-min i) (interval-max i)))

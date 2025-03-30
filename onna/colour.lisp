@@ -7,6 +7,18 @@
 
 (defun colour-8bit (c)
   "The `colour' C in 8-bit (r g b); applies no gamma."
-  (flet ((8-bit (x) (floor (* x 255.999))))
+  (flet ((8-bit (x)
+           (floor (* 256 (alexandria:clamp x 0 0.999)))))
     (with-slots (r g b) c
       (list (8-bit r) (8-bit g) (8-bit b)))))
+
+(defun blend-colours (cs)
+  "Combines multiple colour samples into a single colour."
+  (when cs
+    (let ((r 0) (g 0) (b 0) (l 0))
+      (dolist (c cs)
+        (incf r (colour-r c))
+        (incf g (colour-g c))
+        (incf b (colour-b c))
+        (incf l))
+      (make-colour (/ r l) (/ g l) (/ b l)))))
