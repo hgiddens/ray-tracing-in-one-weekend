@@ -22,3 +22,10 @@
         (incf b (colour-b c))
         (incf l))
       (make-colour (/ r l) (/ g l) (/ b l)))))
+
+(defun gamma-2 (c)
+  ;; For gamma X, the X describes the exponent you use when going from gamma
+  ;; to linear speace. This function does the opposite, so we just take the
+  ;; square root of al the components.
+  (with-slots (r g b) c
+    (make-colour (sqrt r) (sqrt g) (sqrt b))))

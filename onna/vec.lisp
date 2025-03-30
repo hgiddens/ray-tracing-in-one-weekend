@@ -63,6 +63,14 @@
   "V scaled to be a unit vector."
   (scaled-vec3 v (/ (vec3-length v))))
 
+(defun random-unit-vec3 ()
+  "A random vector of unit length."
+  (loop for p = (make-vec3 (+ -1d0 (random 2d0)) (+ -1d0 (random 2d0)) (+ -1d0 (random 2d0)))
+        as length-squared = (vec3-length-squared p)
+        ;; 1d-160 is approximately (sqrt least-positive-double-float)
+        until (and (< 1d-160 length-squared) (<= length-squared 1d0))
+        finally (return (scaled-vec3 p (/ (sqrt length-squared))))))
+
 ;;; As in the book, points are vec3s, but a little more type safe here.
 (defstruct (point3 (:constructor make-point3
                        (x y z

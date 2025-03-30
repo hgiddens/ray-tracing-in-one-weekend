@@ -17,14 +17,19 @@
 
 (defstruct (camera (:constructor nil))
   (centre (make-point3 0 0 0) :type point3)
+  (samples-per-pixel 1 :type (integer 0))
+  (max-depth 0 :type (integer 0))
   (image-width 1 :type (integer 0))
   (image-height 1 :type (integer 0))
-  (samples-per-pixel 1 :type (integer 0))
   (pixel-delta-u (make-vec3 0 0 0) :type vec3)
   (pixel-delta-v (make-vec3 0 0 0) :type vec3)
   (pixel-0-0-loc (make-point3 0 0 0) :type point3))
 
-(defun make-camera (&key (aspect-ratio (/ 16 9)) (image-width 400) (samples-per-pixel 10))
+(defun make-camera (&key
+                      (aspect-ratio (/ 16 9))
+                      (image-width 400)
+                      (samples-per-pixel 10)
+                      (max-depth 10))
   (setf aspect-ratio (coerce aspect-ratio 'double-float))
   (let* ((camera (make-instance 'camera))
          (image-height (max (round image-width aspect-ratio) 1))
@@ -52,22 +57,28 @@
                                  (scaled-vec3 pixel-delta-u 0.5d0)
                                  (scaled-vec3 pixel-delta-v 0.5d0))))
     (setf (camera-centre camera) centre
+          (camera-samples-per-pixel camera) samples-per-pixel
+          (camera-max-depth camera) max-depth
           (camera-image-width camera) image-width
           (camera-image-height camera) image-height
-          (camera-samples-per-pixel camera) samples-per-pixel
           (camera-pixel-delta-u camera) pixel-delta-u
           (camera-pixel-delta-v camera) pixel-delta-v
           (camera-pixel-0-0-loc camera) pixel-0-0-loc)
     camera))
 
-(defun ray-colour (ray world)
-  (let ((interval (make-interval :min 0
+(defun ray-colour (ray world depth)
+  ;; If we've exceeded the ray bounce limit, no more light is gathered.
+  (when (<= depth 0)
+    (return-from ray-colour (make-colour 0 0 0)))
+  (let ((interval (make-interval :min 0.001 ; to deal with shadow acne
                                  :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
     (alexandria:if-let ((hit (hit-test ray world interval)))
-      (let ((normal (hit-record-normal hit)))
-        (make-colour (* 0.5 (1+ (vec3-x normal)))
-                     (* 0.5 (1+ (vec3-y normal)))
-                     (* 0.5 (1+ (vec3-z normal)))))
+      (let* ((normal (hit-record-normal hit))
+             (direction (vec3+ normal (random-unit-vec3)))
+             (next (make-ray :origin (hit-record-point hit)
+                             :direction direction)))
+        (with-slots (r g b) (ray-colour next world (1- depth))
+          (make-colour (* 0.5 r) (* 0.5 g) (* 0.5 b))))
       (let* ((unit-direction (unit-vec3 (ray-direction ray)))
              (a (* 0.5 (1+ (vec3-y unit-direction)))))
         (make-colour (alexandria:lerp a 1 0.5)
@@ -93,6 +104,6 @@
     (loop for j from 0 below (camera-image-height camera) do
       (loop for i from 0 below (camera-image-width camera) do
         (loop repeat (camera-samples-per-pixel camera)
-              collecting (ray-colour (get-ray camera i j) world) into samples
+              collecting (ray-colour (get-ray camera i j) world (camera-max-depth camera)) into samples
               finally (setf (aref image j i) (blend-colours samples)))))
     image))

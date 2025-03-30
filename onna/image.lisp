@@ -10,4 +10,4 @@
     (format stream "P3~%~D ~D ~%255~%" image-width image-height)
     (loop for j from 0 below image-height do
       (loop for i from 0 below image-width do
-        (apply #'format stream "~D ~D ~D~%" (colour-8bit (aref image j i)))))))
+        (format stream "~{~D ~D ~D~%~}" (colour-8bit (gamma-2 (aref image j i))))))))
