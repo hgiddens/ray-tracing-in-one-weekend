@@ -20,7 +20,10 @@
    ;; Left
    (make-sphere :centre (make-point3 -1 0 -1)
                 :radius 0.5
-                :material (make-metal :albedo (make-colour 0.8 0.8 0.8) :fuzz 0.3d0))
+                :material (make-dielectric :refraction-index 1.5d0))
+   (make-sphere :centre (make-point3 -1 0 -1)
+                :radius 0.4
+                :material (make-dielectric :refraction-index (/ 1d0 1.5d0)))
    ;; Right
    (make-sphere :centre (make-point3 1 0 -1)
                 :radius 0.5

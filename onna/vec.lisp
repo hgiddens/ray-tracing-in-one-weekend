@@ -81,6 +81,13 @@
   "Reflects vector V with regard to surface normal N."
   (vec3- v (scaled-vec3 n (* 2 (dot-product v n)))))
 
+(defun refract (uv n eta-i/eta-t)
+  "Refracts vector UV with regard to surface normal N and refactive index ratio ETA-I/ETA-T."
+  (let* ((cos-theta (min (dot-product (vec3- uv) n) 1d0))
+         (r-out-perp (scaled-vec3 (vec3+ uv (scaled-vec3 n cos-theta)) eta-i/eta-t))
+         (r-out-parallel (scaled-vec3 n (- (sqrt (abs (- 1d0 (vec3-length-squared r-out-perp))))))))
+    (vec3+ r-out-perp r-out-parallel)))
+
 ;;; As in the book, points are vec3s, but a little more type safe here.
 (defstruct (point3 (:constructor make-point3
                        (x y z
