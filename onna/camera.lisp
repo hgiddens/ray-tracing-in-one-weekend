@@ -29,27 +29,38 @@
                       (aspect-ratio (/ 16 9))
                       (image-width 400)
                       (samples-per-pixel 10)
-                      (max-depth 10))
+                      (max-depth 10)
+                      (vertical-fov 90)
+                      (look-from (make-point3 0 0 0))
+                      (look-at (make-point3 0 0 -1))
+                      (up (make-vec3 0 1 0)))
   (setf aspect-ratio (coerce aspect-ratio 'double-float))
   (let* ((camera (make-instance 'camera))
          (image-height (max (round image-width aspect-ratio) 1))
-         (centre (make-point3 0 0 0))
+         (centre look-from)
 
          ;; Viewport dimensions.
-         (focal-length 1d0)
-         (viewport-height 2d0)
+         (focal-length (vec3-length (point3- look-from look-at)))
+         (theta (coerce (/ (* vertical-fov pi) 180) 'double-float))
+         (h (tan (/ theta 2d0)))
+         (viewport-height (* 2d0 h focal-length))
          (viewport-width (* viewport-height aspect-ratio))
 
+         ;; Calculate the u, v, w basis vectors for the camera coördinate frame.
+         (w (unit-vec3 (point3- look-from look-at)))
+         (u (unit-vec3 (cross-product up w)))
+         (v (cross-product w u))
+
          ;; Vectors across the horizontal and down the vertical edges.
-         (viewport-u (make-vec3 viewport-width 0 0))
-         (viewport-v (make-vec3 0 (- viewport-height) 0))
+         (viewport-u (scaled-vec3 u viewport-width))
+         (viewport-v (scaled-vec3 v (- viewport-height)))
 
          ;; Horizontal and vertical vectors from pixel centre to pixel centre.
          (pixel-delta-u (scaled-vec3 viewport-u (coerce (/ image-width) 'double-float)))
          (pixel-delta-v (scaled-vec3 viewport-v (coerce (/ image-height) 'double-float)))
 
          ;; Upper left pixel location.
-         (viewport-upper-left (let ((offset (vec3+ (make-vec3 0 0 (- focal-length))
+         (viewport-upper-left (let ((offset (vec3+ (scaled-vec3 w (- focal-length))
                                                    (scaled-vec3 viewport-u (/ -2d0))
                                                    (scaled-vec3 viewport-v (/ -2d0)))))
                                 (point3+ centre offset)))

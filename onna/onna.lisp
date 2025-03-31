@@ -5,7 +5,9 @@
   ;; Not adding a progress bar, because it's not clear to me how I can do that
   ;; well with this being run primarily from Slime.
   (let* ((camera (make-camera :samples-per-pixel 100
-                              :max-depth 50))
+                              :max-depth 50
+                              :look-from (make-point3 -2 2 1)
+                              :vertical-fov 20))
          (world (four-spheres))
          (image (time (render camera world))))
     (with-open-file (stream #P"~/Desktop/test.ppm"
