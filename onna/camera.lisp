@@ -134,7 +134,9 @@
                                   (scaled-vec3 (camera-pixel-delta-u camera) (+ i (vec3-x offset)))
                                   (scaled-vec3 (camera-pixel-delta-v camera) (+ j (vec3-y offset)))))
            (origin (defocus-disc-sample camera)))
-      (make-ray :origin origin :direction (point3- pixel-sample origin)))))
+      (make-ray :origin origin
+                :direction (point3- pixel-sample origin)
+                :time (random 1d0)))))
 
 (defun render (camera world)
   (let* ((image (make-array (list (camera-image-height camera) (camera-image-width camera))

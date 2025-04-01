@@ -40,7 +40,9 @@ Returns a `scatter-record' or `nil'."
       ;; Stop degenerate scatter direction: the random vector cancelling out
       ;; the normal to a near-zero vector.
       (setf scatter-direction hit-normal))
-    (make-scatter-record :scattered (make-ray :origin hit-point :direction scatter-direction)
+    (make-scatter-record :scattered (make-ray :origin hit-point
+                                              :direction scatter-direction
+                                              :time (ray-time ray))
                          :attenuation (lambertian-albedo material))))
 
 ;;;; Metal
@@ -52,7 +54,9 @@ Returns a `scatter-record' or `nil'."
 (defmethod scatter* ((material metal) ray hit-point hit-normal hit-front-face)
   (let* ((reflected (vec3+ (unit-vec3 (reflect (ray-direction ray) hit-normal))
                            (scaled-vec3 (random-unit-vec3) (metal-fuzz material))))
-         (scattered (make-ray :origin hit-point :direction reflected)))
+         (scattered (make-ray :origin hit-point
+                              :direction reflected
+                              :time (ray-time ray))))
     (when (> (dot-product (ray-direction scattered) hit-normal) 0)
       (make-scatter-record :scattered scattered
                            :attenuation (metal-albedo material)))))
@@ -81,5 +85,7 @@ Returns a `scatter-record' or `nil'."
                             (> (reflectance cos-theta ri) (random 1d0)))
                         (reflect unit-direction hit-normal) ; Cannot refract
                         (refract unit-direction hit-normal ri))))
-    (make-scatter-record :scattered (make-ray :origin hit-point :direction direction)
+    (make-scatter-record :scattered (make-ray :origin hit-point
+                                              :direction direction
+                                              :time (ray-time ray))
                          :attenuation (make-colour 1 1 1))))

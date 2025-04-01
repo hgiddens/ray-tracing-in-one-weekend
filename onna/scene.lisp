@@ -38,25 +38,38 @@ Returns a `hit-record' or `nil'."))
 
 ;;;; Spheres
 
+(defun sphere-centre-ray (centre from to)
+  (assert (or (and (null centre) from to)
+              (and centre (null from) (null to)))
+          (centre from to)
+          "Specify either CENTRE or both of FROM and TO")
+  (let ((direction (if centre
+                       (make-vec3 0 0 0)
+                       (point3- to from))))
+    (make-ray :origin (or centre from) :direction direction)))
+
 (defstruct (sphere
             (:constructor make-sphere
-                (&key centre radius material
-                 &aux (radius (coerce radius 'double-float)))))
-  (centre (make-point3 0 0 0) :type point3)
+                (&key centre radius material from to
+                 &aux
+                   (radius (coerce radius 'double-float))
+                   (centre (sphere-centre-ray centre from to)))))
+  (centre (make-ray) :type ray)
   (radius 0d0 :type (double-float 0d0))
   material)
 
 (defmethod hit-test (ray (sphere sphere) ray-interval)
-  (flet ((hit-record-for-root (root)
+  (flet ((hit-record-for-root (root centre)
            (let ((hit-point (point-at-time ray root)))
              (make-hit-record
               :ray ray
               :point hit-point
-              :outward-normal (scaled-vec3 (point3- hit-point (sphere-centre sphere))
+              :outward-normal (scaled-vec3 (point3- hit-point centre)
                                            (/ (sphere-radius sphere)))
               :time root
               :material (sphere-material sphere)))))
-    (let* ((oc (point3- (sphere-centre sphere) (ray-origin ray)))
+    (let* ((current-centre (point-at-time (sphere-centre sphere) (ray-time ray)))
+           (oc (point3- current-centre (ray-origin ray)))
            (a (vec3-length-squared (ray-direction ray)))
            (h (dot-product (ray-direction ray) oc))
            (c (- (vec3-length-squared oc) (* (sphere-radius sphere) (sphere-radius sphere))))
@@ -65,7 +78,8 @@ Returns a `hit-record' or `nil'."))
         (let* ((sqrt-discriminant (sqrt discriminant))
                (root (/ (- h sqrt-discriminant) a)))
           (if (interval-surrounds ray-interval root)
-              (hit-record-for-root root)
+              (hit-record-for-root root current-centre)
               (progn
                 (setf root (/ (+ h sqrt-discriminant) a))
-                (when (interval-surrounds ray-interval root) (hit-record-for-root root)))))))))
+                (when (interval-surrounds ray-interval root)
+                  (hit-record-for-root root current-centre)))))))))

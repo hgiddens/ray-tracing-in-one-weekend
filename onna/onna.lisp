@@ -5,7 +5,7 @@
   ;; Not adding a progress bar, because it's not clear to me how I can do that
   ;; well with this being run primarily from Slime.
   (let* ((camera (make-camera :samples-per-pixel 10
-                              :image-width 600
+                              :image-width 400
                               :max-depth 50
                               :vertical-fov 20
                               :look-from (make-point3 13 2 3)

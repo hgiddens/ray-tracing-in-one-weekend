@@ -31,20 +31,30 @@
 
 (defun book-1-cover ()
   "Cover image of the first book."
-  (flet ((random-material ()
+  (flet ((random-sphere (sphere-centre)
            (let ((choose-material (random 1.0)))
              (cond
                ((< choose-material 0.8)
-                (make-lambertian :albedo (make-colour (* (random 1.0) (random 1.0))
-                                                      (* (random 1.0) (random 1.0))
-                                                      (* (random 1.0) (random 1.0)))))
+                (let ((offset (make-vec3 0 (random 0.5d0) 0)))
+                  (make-sphere :from sphere-centre
+                               :to (point3+ sphere-centre offset)
+                               :radius 0.2
+                               :material (make-lambertian
+                                          :albedo (make-colour (* (random 1.0) (random 1.0))
+                                                               (* (random 1.0) (random 1.0))
+                                                               (* (random 1.0) (random 1.0)))))))
                ((< choose-material 0.95)
-                (make-metal :albedo (make-colour (+ 0.5 (random 0.5))
-                                                 (+ 0.5 (random 0.5))
-                                                 (+ 0.5 (random 0.5)))
-                            :fuzz (random 0.5d0)))
+                (make-sphere :centre sphere-centre
+                             :radius 0.2
+                             :material (make-metal
+                                        :albedo (make-colour (+ 0.5 (random 0.5))
+                                                             (+ 0.5 (random 0.5))
+                                                             (+ 0.5 (random 0.5)))
+                                        :fuzz (random 0.5d0))))
                (t
-                (make-dielectric :refraction-index 1.5d0))))))
+                (make-sphere :centre sphere-centre
+                             :radius 0.2
+                             :material (make-dielectric :refraction-index 1.5d0)))))))
     (let (world)
       ;; Ground
       (push (make-sphere :centre (make-point3 0 -1000 0)
@@ -60,9 +70,7 @@
                            as z = (+ b (random 0.9d0))
                            as sphere-centre = (make-point3 x 0.2 z)
                            when (> (vec3-length (point3- sphere-centre exclusion-centre)) 0.9)
-                             collect (make-sphere :centre sphere-centre
-                                                  :radius 0.2
-                                                  :material (random-material)))
+                             collect (random-sphere sphere-centre))
               into little-spheres
             finally (alexandria:nconcf world little-spheres))
 
