@@ -88,4 +88,4 @@
                          :material (make-metal :albedo (make-colour 0.7 0.6 0.5)))
             world)
 
-      (coerce world 'vector))))
+      (make-bvh-node (coerce world 'vector)))))

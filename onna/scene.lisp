@@ -25,6 +25,53 @@
 
 Returns a `hit-record' or `nil'."))
 
+(defgeneric bounding-box (object))
+
+;;;; BVH
+
+(defstruct (bvh-node (:constructor nil))
+  left
+  right
+  (aabb (make-aabb) :type aabb))
+
+(defun make-bvh-node (objects)
+  ;; TODO: as before, this destroys the objects structure. Seems surprising.
+  (let ((object-span (length objects))
+        (node (make-instance 'bvh-node)))
+    (setf (bvh-node-aabb node)
+          (reduce #'make-aabb-from-aabbs objects
+                  :initial-value (make-aabb)
+                  :key #'bounding-box))
+    (cond
+      ((= object-span 1)
+       ;; TODO: this is still dumb.
+       (setf (bvh-node-left node) (elt objects 0)
+             (bvh-node-right node) (elt objects 0)))
+      ((= object-span 2)
+       (setf (bvh-node-left node) (elt objects 0)
+             (bvh-node-right node) (elt objects 1)))
+      (t
+       (setf objects (sort objects #'< :key (alexandria:compose #'interval-min
+                                                                (longest-axis (bvh-node-aabb node))
+                                                                #'bounding-box)))
+       (let ((mid (floor object-span 2)))
+         (setf (bvh-node-left node) (make-bvh-node (subseq objects 0 mid))
+               (bvh-node-right node) (make-bvh-node (subseq objects mid))))))
+    node))
+
+(defmethod hit-test (ray (node bvh-node) ray-interval)
+  (when (hit-test-aabb ray (bvh-node-aabb node) ray-interval)
+    (let* ((hit-left (hit-test ray (bvh-node-left node) ray-interval))
+           (right-interval (if hit-left
+                               (make-interval :min (interval-min ray-interval)
+                                              :max (hit-record-time hit-left))
+                               ray-interval))
+           (hit-right (hit-test ray (bvh-node-right node) right-interval)))
+      (or hit-right hit-left))))
+
+(defmethod bounding-box ((node bvh-node))
+  (bvh-node-aabb node))
+
 ;;;; Sequences of objects
 
 (defmethod hit-test (ray (seq sequence) ray-interval)
@@ -35,6 +82,11 @@ Returns a `hit-record' or `nil'."))
       (alexandria:when-let ((record (hit-test ray (elt seq i) ray-interval)))
         (setf closest record
               (interval-max ray-interval) (hit-record-time record))))))
+
+(defmethod bounding-box ((seq sequence))
+  (let ((aabb (make-aabb)))
+    (dotimes (i (length seq))
+      (setf aabb (make-aabb-from-aabbs aabb (bounding-box (elt seq i)))))))
 
 ;;;; Spheres
 
@@ -53,10 +105,21 @@ Returns a `hit-record' or `nil'."))
                 (&key centre radius material from to
                  &aux
                    (radius (coerce radius 'double-float))
-                   (centre (sphere-centre-ray centre from to)))))
+                   (centre (sphere-centre-ray centre from to))
+                   (aabb (let* ((radius-vector (make-vec3 radius radius radius))
+                                (box-0 (let ((c (point-at-time centre 0d0)))
+                                         (make-aabb-from-points (point3+ c (vec3- radius-vector))
+                                                                (point3+ c radius-vector))))
+                                (box-1 (let ((c (point-at-time centre 1d0)))
+                                         (make-aabb-from-points (point3+ c (vec3- radius-vector))
+                                                                (point3+ c radius-vector)))))
+
+                           (make-aabb-from-aabbs box-0 box-1))))))
   (centre (make-ray) :type ray)
   (radius 0d0 :type (double-float 0d0))
-  material)
+  material
+  ;; TODO: Why is this stored here and not in the BVH structure?
+  (aabb (make-aabb) :type aabb))
 
 (defmethod hit-test (ray (sphere sphere) ray-interval)
   (flet ((hit-record-for-root (root centre)
@@ -83,3 +146,6 @@ Returns a `hit-record' or `nil'."))
                 (setf root (/ (+ h sqrt-discriminant) a))
                 (when (interval-surrounds ray-interval root)
                   (hit-record-for-root root current-centre)))))))))
+
+(defmethod bounding-box ((sphere sphere))
+  (sphere-aabb sphere))

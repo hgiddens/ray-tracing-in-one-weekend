@@ -113,17 +113,23 @@
 ;;; This doesn't really have anything to do with vectors but I guess it
 ;;; doesn't not make sense here, if you consider this a generic "math
 ;;; primitives" dumping ground.
-(defstruct (interval (:constructor make-interval
-                       (&key min max
-                        &aux
-                          (min (coerce min 'double-float))
-                          (max (coerce max 'double-float)))))
-  ;; These are stupid defaults because it means the default interval is
-  ;; simultaneously empty and infinitely large (due to the implementation of
-  ;; interval::size in the C++. I'm assuming we won't care about the size of
-  ;; an interval for a while though, so I just won't implement that.
+(defstruct (interval
+            (:constructor empty-interval)
+            (:constructor make-interval
+                ;; TODO: as written, this shouldn't be using kwargs
+                (&key min max
+                 &aux
+                   (min (coerce min 'double-float))
+                   (max (coerce max 'double-float)))))
+  ;; These are frustrating defaults because it means the default interval is
+  ;; empty but the size is non-zero (it's negative infinity instead).
   (min #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY :type double-float)
   (max #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY :type double-float))
+
+(defun combine-intervals (a b)
+  "Builds an `interval' tightly enclosing the input intervals A and B."
+  (make-interval :min (min (interval-min a) (interval-min b))
+                 :max (max (interval-max a) (interval-max b))))
 
 (defun interval-contains (i x)
   (declare (type double-float x))
@@ -141,3 +147,11 @@
 (defun clamp-to-interval (i d)
   (declare (type double-float d))
   (alexandria:clamp d (interval-min i) (interval-max i)))
+
+(defun expand-interval (i delta)
+  (let ((padding (/ delta 2d0)))
+    (make-interval :min (- (interval-min i) padding)
+                   :max (+ (interval-max i) padding))))
+
+(defun interval-size (i)
+  (- (interval-max i) (interval-min i)))
