@@ -4,7 +4,7 @@
   (scattered (make-ray) :type ray)
   (attenuation (make-colour 0 0 0) :type colour))
 
-(defgeneric scatter* (material ray hit-point hit-normal hit-front-face))
+(defgeneric scatter* (material ray hit-point hit-normal hit-front-face hit-u hit-v))
 
 (defun scatter (ray hit)
   "Scatters RAY according to HIT.
@@ -18,12 +18,14 @@ Returns a `scatter-record' or `nil'."
             ray
             (hit-record-point hit)
             (hit-record-normal hit)
-            (hit-record-front-face hit)))
+            (hit-record-front-face hit)
+            (hit-record-u hit)
+            (hit-record-v hit)))
 
 ;;;; Null material
 
 ;;; I'm not sure this is a good idea, but means that old scenes keep working?
-(defmethod scatter* ((material null) ray hit-point hit-normal hit-front-face)
+(defmethod scatter* ((material null) ray hit-point hit-normal hit-front-face hit-u hit-v)
   (let ((direction (vec3+ hit-normal (random-unit-vec3))))
     (make-scatter-record :scattered (make-ray :origin hit-point
                                               :direction direction)
@@ -32,18 +34,20 @@ Returns a `scatter-record' or `nil'."
 ;;;; Lambertian
 
 (defstruct lambertian
-  (albedo (make-colour 0 0 0) :type colour))
+  (texture (make-colour 0 0 0)))
 
-(defmethod scatter* ((material lambertian) ray hit-point hit-normal hit-front-face)
+(defmethod scatter* ((material lambertian) ray hit-point hit-normal hit-front-face hit-u hit-v)
+  (declare (ignore hit-front-face))
   (let ((scatter-direction (vec3+ hit-normal (random-unit-vec3))))
     (when (near-zero-vec3-p scatter-direction)
       ;; Stop degenerate scatter direction: the random vector cancelling out
       ;; the normal to a near-zero vector.
       (setf scatter-direction hit-normal))
-    (make-scatter-record :scattered (make-ray :origin hit-point
-                                              :direction scatter-direction
-                                              :time (ray-time ray))
-                         :attenuation (lambertian-albedo material))))
+    (make-scatter-record
+     :scattered (make-ray :origin hit-point
+                          :direction scatter-direction
+                          :time (ray-time ray))
+     :attenuation (texture-value (lambertian-texture material) hit-u hit-v hit-point))))
 
 ;;;; Metal
 
@@ -51,7 +55,8 @@ Returns a `scatter-record' or `nil'."
   (albedo (make-colour 0 0 0) :type colour)
   (fuzz 0d0 :type (double-float 0d0 1d0)))
 
-(defmethod scatter* ((material metal) ray hit-point hit-normal hit-front-face)
+(defmethod scatter* ((material metal) ray hit-point hit-normal hit-front-face hit-u hit-v)
+  (declare (ignore hit-front-face hit-u hit-v))
   (let* ((reflected (vec3+ (unit-vec3 (reflect (ray-direction ray) hit-normal))
                            (scaled-vec3 (random-unit-vec3) (metal-fuzz material))))
          (scattered (make-ray :origin hit-point
@@ -74,7 +79,8 @@ Returns a `scatter-record' or `nil'."
     (setf r0 (* r0 r0))
     (+ r0 (* (- 1d0 r0) (expt (- 1 cosine) 5)))))
 
-(defmethod scatter* ((material dielectric) ray hit-point hit-normal hit-front-face)
+(defmethod scatter* ((material dielectric) ray hit-point hit-normal hit-front-face hit-u hit-v)
+  (declare (ignore hit-u hit-v))
   (let* ((ri (let ((r (dielectric-refraction-index material)))
                (if hit-front-face (/ r) r)))
          (unit-direction (unit-vec3 (ray-direction ray)))

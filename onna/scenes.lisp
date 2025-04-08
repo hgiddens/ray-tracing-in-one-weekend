@@ -12,11 +12,11 @@
    ;; Ground
    (make-sphere :centre (make-point3 0 -100.5 -1)
                 :radius 100
-                :material (make-lambertian :albedo (make-colour 0.8 0.8 0)))
+                :material (make-lambertian :texture (make-colour 0.8 0.8 0)))
    ;; Centre
    (make-sphere :centre (make-point3 0 0 -1.2)
                 :radius 0.5
-                :material (make-lambertian :albedo (make-colour 0.1 0.2 0.5)))
+                :material (make-lambertian :texture (make-colour 0.1 0.2 0.5)))
    ;; Left
    (make-sphere :centre (make-point3 -1 0 -1)
                 :radius 0.5
@@ -29,7 +29,7 @@
                 :radius 0.5
                 :material (make-metal :albedo (make-colour 0.8 0.6 0.2) :fuzz 1d0))))
 
-(defun book-1-cover ()
+(defun bouncing-spheres ()
   "Cover image of the first book."
   (flet ((random-sphere (sphere-centre)
            (let ((choose-material (random 1.0)))
@@ -40,9 +40,9 @@
                                :to (point3+ sphere-centre offset)
                                :radius 0.2
                                :material (make-lambertian
-                                          :albedo (make-colour (* (random 1.0) (random 1.0))
-                                                               (* (random 1.0) (random 1.0))
-                                                               (* (random 1.0) (random 1.0)))))))
+                                          :texture (make-colour (* (random 1.0) (random 1.0))
+                                                                (* (random 1.0) (random 1.0))
+                                                                (* (random 1.0) (random 1.0)))))))
                ((< choose-material 0.95)
                 (make-sphere :centre sphere-centre
                              :radius 0.2
@@ -57,9 +57,12 @@
                              :material (make-dielectric :refraction-index 1.5d0)))))))
     (let (world)
       ;; Ground
-      (push (make-sphere :centre (make-point3 0 -1000 0)
-                         :radius 1000
-                         :material (make-lambertian :albedo (make-colour 0.5 0.5 0.5)))
+      (push (let* ((even (make-colour 0.2 0.3 0.1))
+                   (odd (make-colour 0.9 0.9 0.9))
+                   (chequer (make-chequer :scale 0.32 :even even :odd odd)))
+              (make-sphere :centre (make-point3 0 -1000 0)
+                    :radius 1000
+                    :material (make-lambertian :texture chequer)))
             world)
 
       ;; Thousands of luminous spheres
@@ -81,7 +84,7 @@
             world)
       (push (make-sphere :centre (make-point3 -4 1 0)
                          :radius 1
-                         :material (make-lambertian :albedo (make-colour 0.4 0.2 0.1)))
+                         :material (make-lambertian :texture (make-colour 0.4 0.2 0.1)))
             world)
       (push (make-sphere :centre (make-point3 4 1 0)
                          :radius 1
@@ -89,3 +92,23 @@
             world)
 
       (make-bvh-node (coerce world 'vector)))))
+
+(defun chequered-spheres ()
+  "Book 2 chapter 4.3."
+  (let ((texture (make-chequer :scale 0.32
+                               :even (make-colour 0.2 0.3 0.1)
+                               :odd (make-colour 0.9 0.9 0.9))))
+    (vector
+     (make-sphere :centre (make-point3 0 -10 0)
+                  :radius 10
+                  :material (make-lambertian :texture texture))
+     (make-sphere :centre (make-point3 0 10 0)
+                  :radius 10
+                  :material (make-lambertian :texture texture)))))
+
+(defun earth ()
+  "Book 2 chapter 4.6."
+  (let* ((image (with-open-file (stream #P"earthmap.png" :element-type '(unsigned-byte 8))
+                  (read-png stream)))
+         (texture (make-image-texture :image image)))
+    (make-sphere :centre (make-point3 0 0 0) :radius 2 :material (make-lambertian :texture texture))))

@@ -8,7 +8,7 @@
 (defun colour-8bit (c)
   "The `colour' C in 8-bit (r g b); applies no gamma."
   (flet ((8-bit (x)
-           (floor (* 256 (alexandria:clamp x 0 0.999)))))
+           (coerce (floor (* 256 (alexandria:clamp x 0 0.999))) '(unsigned-byte 8))))
     (with-slots (r g b) c
       (list (8-bit r) (8-bit g) (8-bit b)))))
 

@@ -4,7 +4,7 @@
 
 (defstruct (hit-record
             (:constructor make-hit-record
-                (&key ray point outward-normal time material
+                (&key ray point outward-normal time material u v
                  &aux
                    (front-face (< (dot-product (ray-direction ray) outward-normal) 0))
                    (normal (if front-face outward-normal (vec3- outward-normal))))))
@@ -12,6 +12,8 @@
   ;; The normal, facing against the incident ray
   (normal (make-vec3 0 0 0) :type vec3)
   (time 0d0 :type double-float)
+  (u 0d0 :type double-float)
+  (v 0d0 :type double-float)
   front-face
   material)
 
@@ -123,13 +125,19 @@ Returns a `hit-record' or `nil'."))
 
 (defmethod hit-test (ray (sphere sphere) ray-interval)
   (flet ((hit-record-for-root (root centre)
-           (let ((hit-point (point-at-time ray root)))
+           (let* ((hit-point (point-at-time ray root))
+                  (outward-normal (scaled-vec3 (point3- hit-point centre)
+                                               (/ (sphere-radius sphere))))
+                  (theta (acos (- (vec3-y outward-normal))))
+                  (phi (+ (atan (- (vec3-z outward-normal)) (vec3-x outward-normal)) pi)))
              (make-hit-record
               :ray ray
               :point hit-point
-              :outward-normal (scaled-vec3 (point3- hit-point centre)
-                                           (/ (sphere-radius sphere)))
+              :outward-normal outward-normal
               :time root
+              :u (/ phi (* 2 pi))
+              :v (/ theta pi)
+              ;; TODO: I was here! Up to section 4.5 in the book, loading image texture data.
               :material (sphere-material sphere)))))
     (let* ((current-centre (point-at-time (sphere-centre sphere) (ray-time ray)))
            (oc (point3- current-centre (ray-origin ray)))
