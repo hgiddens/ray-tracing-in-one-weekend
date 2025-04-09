@@ -6,6 +6,17 @@
   :license "MIT"
   :version "0.0.1"
   :components ((:file "package")
-               (:file "onna"))
+               (:file "colour" :depends-on ("package"))
+               (:file "image" :depends-on ("package" "colour" "scene"))
+               (:file "vec" :depends-on ("package"))
+               (:file "ray" :depends-on ("package" "vec"))
+               (:file "aabb" :depends-on ("package" "vec"))
+               (:file "camera" :depends-on ("package" "vec" "ray" "colour" "image"))
+               (:file "texture" :depends-on ("package" "colour"))
+               (:file "scene" :depends-on ("package" "ray" "vec" "aabb"))
+               (:file "material" :depends-on ("package" "vec" "colour" "texture"))
+               (:file "scenes" :depends-on ("package" "scene" "vec" "material"))
+               (:file "onna" :depends-on ("package" "camera" "scenes" "image")))
   :depends-on (:alexandria
+               :png
                :random-state))
