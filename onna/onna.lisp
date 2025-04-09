@@ -10,9 +10,9 @@
                               :vertical-fov 20
                               :look-from (make-point3 13 2 3)
                               :look-at (make-point3 0 0 0)
-                              :defocus-angle 0.6
+                              :defocus-angle 0
                               :focus-distance 10))
-         (world (earth))
+         (world (perlin-spheres))
          (image (time (render camera world))))
     (with-open-file (stream #P"~/Desktop/test.png"
                             :element-type '(unsigned-byte 8)

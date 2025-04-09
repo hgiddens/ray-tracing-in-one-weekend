@@ -112,3 +112,10 @@
                   (read-png stream)))
          (texture (make-image-texture :image image)))
     (make-sphere :centre (make-point3 0 0 0) :radius 2 :material (make-lambertian :texture texture))))
+
+(defun perlin-spheres ()
+  "Book 2 chapter 5.1."
+  (let ((perlin-material (make-lambertian :texture (make-perlin :scale 4d0))))
+    (vector
+     (make-sphere :centre (make-point3 0 -1000 0) :radius 1000 :material perlin-material)
+     (make-sphere :centre (make-point3 0 2 0) :radius 2 :material perlin-material))))
