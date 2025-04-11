@@ -157,3 +157,55 @@ Returns a `hit-record' or `nil'."))
 
 (defmethod bounding-box ((sphere sphere))
   (sphere-aabb sphere))
+
+;;;; Quadrilaterals
+
+(defstruct (quad
+            (:constructor make-quad
+              (&key q u v material
+               &aux
+                 (n (cross-product u v))
+                 ;; This will "deliberately" divide by zero if the u and v
+                 ;; basis vectors are parallel.
+                 (w (scaled-vec3 n (/ (dot-product n n))))
+                 (aabb (let ((diagonal-1 (make-aabb-from-points q (point3+ q u v)))
+                             (diagonal-2 (make-aabb-from-points (point3+ q u) (point3+ q v))))
+                         (make-aabb-from-aabbs diagonal-1 diagonal-2)))
+                 (normal (unit-vec3 n))
+                 (d (dot-product normal q)))))
+  (q (make-point3 0 0 0) :type point3)
+  (u (make-vec3 0 0 0) :type vec3)
+  (v (make-vec3 0 0 0) :type vec3)
+  (w (make-vec3 0 0 0) :type vec3)
+  material
+  ;; TODO: Same question as with spheres above: why is this here?
+  (aabb (make-aabb) :type aabb)
+  (normal (make-vec3 0 0 0) :type vec3)
+  (d 0d0 :type double-float))
+
+(defmethod hit-test (ray (quad quad) ray-interval)
+  (let ((denom (dot-product (quad-normal quad) (ray-direction ray))))
+    ;; No hit if the ray is parallel to the plane.
+    (unless (< (abs denom) 1d-8)
+      (let ((time (/  (- (quad-d quad) (dot-product (quad-normal quad) (ray-origin ray))) denom)))
+        ;; No hit if the time parameter is outside the ray interval.
+        (when (interval-contains ray-interval time)
+          (let* ((intersection (point-at-time ray time))
+                 (planar-hit-point-vector (point3- intersection (quad-q quad)))
+                 (alpha (dot-product (quad-w quad)
+                                     (cross-product planar-hit-point-vector (quad-v quad))))
+                 (beta (dot-product (quad-w quad)
+                                    (cross-product (quad-u quad) planar-hit-point-vector))))
+            ;; No hit if the intersection is outside the planar shape.
+            (when (and (<= 0d0 alpha 1d0)
+                       (<= 0d0 beta 1d0))
+              (make-hit-record :ray ray
+                               :point intersection
+                               :outward-normal (quad-normal quad)
+                               :time time
+                               :u alpha
+                               :v beta
+                               :material (quad-material quad)))))))))
+
+(defmethod bounding-box ((quad quad))
+  (quad-aabb quad))

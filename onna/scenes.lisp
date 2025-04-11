@@ -119,3 +119,27 @@
     (vector
      (make-sphere :centre (make-point3 0 -1000 0) :radius 1000 :material perlin-material)
      (make-sphere :centre (make-point3 0 2 0) :radius 2 :material perlin-material))))
+
+(defun quads ()
+  "Book 2 chapter 6.6."
+  (vector
+   (make-quad :q (make-point3 -3 -2 5)
+              :u (make-vec3 0 0 -4)
+              :v (make-vec3 0 4 0)
+              :material (make-lambertian :texture (make-colour 1 0.2 0.2)))
+   (make-quad :q (make-point3 -2 -2 0)
+              :u (make-vec3 4 0 0)
+              :v (make-vec3 0 4 0)
+              :material (make-lambertian :texture (make-colour 0.2 1 0.2)))
+   (make-quad :q (make-point3 3 -2 1)
+              :u (make-vec3 0 0 4)
+              :v (make-vec3 0 4 0)
+              :material (make-lambertian :texture (make-colour 0.2 0.2 1)))
+   (make-quad :q (make-point3 -2 3 1)
+              :u (make-vec3 4 0 0)
+              :v (make-vec3 0 0 4)
+              :material (make-lambertian :texture (make-colour 1 0.5 0)))
+   (make-quad :q (make-point3 -2 -3 5)
+              :u (make-vec3 4 0 0)
+              :v (make-vec3 0 0 -4)
+              :material (make-lambertian :texture (make-colour 0.2 0.8 0.8)))))

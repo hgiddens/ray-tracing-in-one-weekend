@@ -1,16 +1,33 @@
 (in-package :onna)
 
+(defun pad-to-minimum (interval)
+  "Pads INTERVAL not have zero size.
+
+Used to ensure that AABBs don't have zero volume."
+  (let ((delta 0.0001))
+    (if (< (interval-size interval) delta)
+        (expand-interval interval delta)
+        interval)))
+
 (defstruct (aabb
+            ;; In the book, the default constructor also calls pad-to-minimum
+            ;; on its empty intervals, but misses that this is pointless;
+            ;; expand-interval is implemented as min = min - delta/2, so the
+            ;; infinities remain. However, I don't think this actually matters
+            ;; in practice.
             (:constructor)
             (:constructor make-aabb-from-points
                 (a b
                  &aux
                    (x (let ((ax (point3-x a)) (bx (point3-x b)))
-                        (make-interval :min (min ax bx) :max (max ax bx))))
+                        (pad-to-minimum (make-interval :min (min ax bx)
+                                                       :max (max ax bx)))))
                    (y (let ((ay (point3-y a)) (by (point3-y b)))
-                        (make-interval :min (min ay by) :max (max ay by))))
+                        (pad-to-minimum (make-interval :min (min ay by)
+                                                       :max (max ay by)))))
                    (z (let ((az (point3-z a)) (bz (point3-z b)))
-                        (make-interval :min (min az bz) :max (max az bz))))))
+                        (pad-to-minimum (make-interval :min (min az bz)
+                                                       :max (max az bz)))))))
             (:constructor make-aabb-from-aabbs
                 (a b
                  &aux
