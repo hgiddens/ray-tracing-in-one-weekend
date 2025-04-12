@@ -4,6 +4,9 @@
   (scattered (make-ray) :type ray)
   (attenuation (make-colour 0 0 0) :type colour))
 
+(defgeneric emitted (material u v p)
+  (:documentation "Colour emitted by MATERIAL at point P and texture coördinates U,V."))
+
 (defgeneric scatter* (material ray hit-point hit-normal hit-front-face hit-u hit-v))
 
 (defun scatter (ray hit)
@@ -24,6 +27,10 @@ Returns a `scatter-record' or `nil'."
 
 ;;;; Null material
 
+(defmethod emitted ((material null) u v p)
+  (declare (ignore u v p))
+  (make-colour 0 0 0))
+
 ;;; I'm not sure this is a good idea, but means that old scenes keep working?
 (defmethod scatter* ((material null) ray hit-point hit-normal hit-front-face hit-u hit-v)
   (let ((direction (vec3+ hit-normal (random-unit-vec3))))
@@ -35,6 +42,10 @@ Returns a `scatter-record' or `nil'."
 
 (defstruct lambertian
   (texture (make-colour 0 0 0)))
+
+(defmethod emitted ((material lambertian) u v p)
+  (declare (ignore u v p))
+  (make-colour 0 0 0))
 
 (defmethod scatter* ((material lambertian) ray hit-point hit-normal hit-front-face hit-u hit-v)
   (declare (ignore hit-front-face))
@@ -55,6 +66,10 @@ Returns a `scatter-record' or `nil'."
   (albedo (make-colour 0 0 0) :type colour)
   (fuzz 0d0 :type (double-float 0d0 1d0)))
 
+(defmethod emitted ((material metal) u v p)
+  (declare (ignore u v p))
+  (make-colour 0 0 0))
+
 (defmethod scatter* ((material metal) ray hit-point hit-normal hit-front-face hit-u hit-v)
   (declare (ignore hit-front-face hit-u hit-v))
   (let* ((reflected (vec3+ (unit-vec3 (reflect (ray-direction ray) hit-normal))
@@ -72,6 +87,10 @@ Returns a `scatter-record' or `nil'."
   ;; Refractive index in vacuum or air, or the ratio of the material's
   ;; refractive index over the refractive index of the enclosing media.
   (refraction-index 0d0 :type double-float))
+
+(defmethod emitted ((material dielectric) u v p)
+  (declare (ignore u v p))
+  (make-colour 0 0 0))
 
 (defun reflectance (cosine refraction-index)
   "Schlick's approximation for reflectance."
@@ -95,3 +114,16 @@ Returns a `scatter-record' or `nil'."
                                               :direction direction
                                               :time (ray-time ray))
                          :attenuation (make-colour 1 1 1))))
+
+;;;; Diffuse light
+
+(defstruct diffuse-light
+  texture)
+
+;;; TODO: it's probably a code smell that all these materials have either an
+;;; implementation for emitted or scatter, but not both.
+(defmethod emitted ((light diffuse-light) u v p)
+  (texture-value (diffuse-light-texture light) u v p))
+
+(defmethod scatter* ((light diffuse-light) ray hit-point hit-normal hit-front-face hit-u hit-v)
+  nil)

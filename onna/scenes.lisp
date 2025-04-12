@@ -143,3 +143,27 @@
               :u (make-vec3 4 0 0)
               :v (make-vec3 0 0 -4)
               :material (make-lambertian :texture (make-colour 0.2 0.8 0.8)))))
+
+(defun simple-light ()
+  "Book 2 chapter 7.3."
+  (let ((perlin-material (make-lambertian :texture (make-perlin :scale 4d0)))
+        (light-material (make-diffuse-light :texture (make-colour 4 4 4))))
+    (vector
+     (make-sphere :centre (make-point3 0 -1000 0) :radius 1000 :material perlin-material)
+     (make-sphere :centre (make-point3 0 2 0) :radius 2 :material perlin-material)
+     (make-sphere :centre (make-point3 0 7 0) :radius 2 :material light-material)
+     (make-quad :q (make-point3 3 1 -2) :u (make-vec3 2 0 0) :v (make-vec3 0 2 0) :material light-material))))
+
+(defun cornell-box ()
+  "Book 2 chapter 7.4."
+  (let ((red (make-lambertian :texture (make-colour 0.65 0.05 0.05)))
+        (white (make-lambertian :texture (make-colour 0.73 0.73 0.73)))
+        (green (make-lambertian :texture (make-colour 0.12 0.45 0.15)))
+        (light (make-diffuse-light :texture (make-colour 15 15 15))))
+    (vector
+     (make-quad :q (make-point3 555 0 0) :u (make-vec3 0 555 0) :v (make-vec3 0 0 555) :material green)
+     (make-quad :q (make-point3 0 0 0) :u (make-vec3 0 555 0) :v (make-vec3 0 0 555) :material red)
+     (make-quad :q (make-point3 343 554 332) :u (make-vec3 -130 0 0) :v (make-vec3 0 0 -105) :material light)
+     (make-quad :q (make-point3 0 0 0) :u (make-vec3 555 0 0) :v (make-vec3 0 0 555) :material white)
+     (make-quad :q (make-point3 555 555 555) :u (make-vec3 -555 0 0) :v (make-vec3 0 0 -555) :material white)
+     (make-quad :q (make-point3 0 0 555) :u (make-vec3 555 0 0) :v (make-vec3 0 555 0) :material white))))

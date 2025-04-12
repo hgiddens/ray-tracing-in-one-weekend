@@ -1,9 +1,12 @@
 (in-package #:onna)
 
 (defstruct (colour (:constructor make-colour (r g b)))
-  (r 0 :type (real 0 1))
-  (g 0 :type (real 0 1))
-  (b 0 :type (real 0 1)))
+  ;; TODO: The book explicitly has colours with values beyond [0,1] to allow
+  ;; lights bright enough to be useful to be created; these do get clamped
+  ;; down to [0,1] in colour-8bit. An obvious thing to look into is HDR.
+  (r 0 :type (real 0))
+  (g 0 :type (real 0))
+  (b 0 :type (real 0)))
 
 (defun colour-8bit (c)
   "The `colour' C in 8-bit (r g b); applies no gamma."

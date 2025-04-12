@@ -19,6 +19,7 @@
   (centre (make-point3 0 0 0) :type point3)
   (samples-per-pixel 1 :type (integer 0))
   (max-depth 0 :type (integer 0))
+  (background-colour (make-colour 0 0 0) :type colour)
   (image-width 1 :type (integer 0))
   (image-height 1 :type (integer 0))
   ;; Pixel vectors.
@@ -34,6 +35,7 @@
                       (image-width 400)
                       (samples-per-pixel 10)
                       (max-depth 10)
+                      (background-colour (make-colour 0.7 0.8 1))
                       (vertical-fov 90)
                       (look-from (make-point3 0 0 0))
                       (look-at (make-point3 0 0 -1))
@@ -89,6 +91,7 @@
       (setf (camera-centre camera) centre
             (camera-samples-per-pixel camera) samples-per-pixel
             (camera-max-depth camera) max-depth
+            (camera-background-colour camera) background-colour
             (camera-image-width camera) image-width
             (camera-image-height camera) image-height
             (camera-pixel-delta-u camera) pixel-delta-u
@@ -98,22 +101,29 @@
             (camera-defocus-disc-v camera) defocus-disc-v)
       camera)))
 
-(defun ray-colour (ray world depth)
+(defun ray-colour (ray world depth background-colour)
+  ;; TODO: This function is gross now.
   ;; If we've exceeded the ray bounce limit, no more light is gathered.
   (when (<= depth 0)
     (return-from ray-colour (make-colour 0 0 0)))
   (let ((interval (make-interval :min 0.001 ; to deal with shadow acne
                                  :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
     (alexandria:if-let ((hit (hit-test ray world interval)))
-      (alexandria:if-let ((scattered (scatter ray hit)))
-        (attenuate (ray-colour (scatter-record-scattered scattered) world (1- depth))
-                   (scatter-record-attenuation scattered))
-        (make-colour 0 0 0))
-      (let* ((unit-direction (unit-vec3 (ray-direction ray)))
-             (a (* 0.5 (1+ (vec3-y unit-direction)))))
-        (make-colour (alexandria:lerp a 1 0.5)
-                     (alexandria:lerp a 1 0.7)
-                     1)))))
+      (let ((colour-from-emission (emitted (hit-record-material hit)
+                                           (hit-record-u hit)
+                                           (hit-record-v hit)
+                                           (hit-record-point hit))))
+        (alexandria:if-let ((scattered (scatter ray hit)))
+          (let ((colour-from-scatter (attenuate (ray-colour (scatter-record-scattered scattered)
+                                                            world
+                                                            (1- depth)
+                                                            background-colour)
+                                                (scatter-record-attenuation scattered))))
+            (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
+                         (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
+                         (+ (colour-b colour-from-emission) (colour-b colour-from-scatter))))
+          colour-from-emission))
+      background-colour)))
 
 (defun defocus-disc-sample (camera)
   (loop for u-scale = (1- (random 2d0))
@@ -145,6 +155,10 @@
     (loop for j from 0 below (camera-image-height camera) do
       (loop for i from 0 below (camera-image-width camera) do
         (loop repeat (camera-samples-per-pixel camera)
-              collecting (ray-colour (get-ray camera i j) world (camera-max-depth camera)) into samples
+              collecting (ray-colour (get-ray camera i j)
+                                     world
+                                     (camera-max-depth camera)
+                                     (camera-background-colour camera))
+                into samples
               finally (setf (aref image j i) (blend-colours samples)))))
     image))
