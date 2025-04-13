@@ -14,7 +14,7 @@
                               :look-at (make-point3 278 278 0)
                               :defocus-angle 0
                               :focus-distance 10))
-         (world (cornell-box))
+         (world (cornell-smoke))
          (image (time (render camera world))))
     (with-open-file (stream #P"~/Desktop/test.png"
                             :element-type '(unsigned-byte 8)

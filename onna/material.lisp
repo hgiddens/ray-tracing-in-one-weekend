@@ -127,3 +127,17 @@ Returns a `scatter-record' or `nil'."
 
 (defmethod scatter* ((light diffuse-light) ray hit-point hit-normal hit-front-face hit-u hit-v)
   nil)
+
+;;;; Isotropic
+
+(defstruct isotropic texture)
+
+(defmethod emitted ((iso isotropic) u v p)
+  (declare (ignore u v p))
+  (make-colour 0 0 0))
+
+(defmethod scatter* ((iso isotropic) ray hit-point hit-normal hit-front-face hit-u hit-v)
+  (make-scatter-record :scattered (make-ray :origin hit-point
+                                            :direction (random-unit-vec3)
+                                            :time (ray-time ray))
+                       :attenuation (texture-value (isotropic-texture iso) hit-u hit-v hit-point)))

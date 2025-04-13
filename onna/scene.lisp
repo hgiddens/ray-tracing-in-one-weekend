@@ -335,3 +335,50 @@ Returns a `hit-record' or `nil'."))
 
 (defmethod bounding-box ((rotate rotate-y))
   (rotate-y-aabb rotate))
+
+;;;; Volumes
+
+(defstruct (constant-medium
+            (:constructor make-constant-medium
+              (&key boundary density texture
+               &aux
+                 (negative-inverse-density (/ -1d0 (coerce density 'double-float)))
+                 (phase-function (make-isotropic :texture texture)))))
+  boundary
+  (negative-inverse-density 0d0 :type double-float)
+  phase-function)
+
+
+(defmethod hit-test (ray (medium constant-medium) ray-interval)
+  ;; Note: this assumes a convex boundary; see the end of §9.1 in book 2.
+  (alexandria:when-let
+      ((rec-1 (hit-test ray
+                        (constant-medium-boundary medium)
+                        (universe-interval))))
+    (alexandria:when-let
+        ((rec-2 (hit-test ray
+                          (constant-medium-boundary medium)
+                          (make-interval :min (+ (hit-record-time rec-1) 0.0001d0)
+                                         :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
+      (alexandria:maxf (hit-record-time rec-1) (interval-min ray-interval))
+      (alexandria:minf (hit-record-time rec-2) (interval-max ray-interval))
+      (unless (>= (hit-record-time rec-1) (hit-record-time rec-2))
+        (alexandria:maxf (hit-record-time rec-1) 0)
+        (let* ((ray-length (vec3-length (ray-direction ray)))
+               (distance-inside-boundary (* (- (hit-record-time rec-2)
+                                               (hit-record-time rec-1))
+                                            ray-length))
+               (hit-distance (* (constant-medium-negative-inverse-density medium)
+                                (log (random 1d0))))
+               (hit-time (+ (hit-record-time rec-1) (/ hit-distance ray-length))))
+          (unless (> hit-distance distance-inside-boundary)
+            (make-hit-record :ray ray
+                             :point (point-at-time ray hit-time)
+                             ;; The outward normal is arbitrary, and it
+                             ;; doesn't matter what front-face gets set to.
+                             :outward-normal (make-vec3 1 0 0)
+                             :time hit-time
+                             :material (constant-medium-phase-function medium))))))))
+
+(defmethod bounding-box ((medium constant-medium))
+  (bounding-box (constant-medium-boundary medium)))

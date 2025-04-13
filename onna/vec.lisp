@@ -116,7 +116,11 @@
 (defstruct (interval
             (:constructor empty-interval)
             (:constructor make-interval
-                ;; TODO: as written, this shouldn't be using kwargs
+                ;; TODO: as written, this shouldn't be using
+                ;; kwargs. Alternatively, keep using kwargs but have min
+                ;; default to -inf and max to inf, so that it's easy to make
+                ;; an interval with only one end. This would be useful for the
+                ;; constant-medium hit-test implementation.
                 (&key min max
                  &aux
                    (min (coerce min 'double-float))
