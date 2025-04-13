@@ -5,16 +5,16 @@
   ;; Not adding a progress bar, because it's not clear to me how I can do that
   ;; well with this being run primarily from Slime.
   (let* ((camera (make-camera :aspect-ratio 1
-                              :samples-per-pixel 200
-                              :image-width 600
+                              :samples-per-pixel 50
+                              :image-width 400
                               :max-depth 50
                               :background-colour (make-colour 0 0 0)
                               :vertical-fov 40
-                              :look-from (make-point3 278 278 -800)
+                              :look-from (make-point3 478 278 -600)
                               :look-at (make-point3 278 278 0)
                               :defocus-angle 0
                               :focus-distance 10))
-         (world (cornell-smoke))
+         (world (final-scene))
          (image (time (render camera world))))
     (with-open-file (stream #P"~/Desktop/test.png"
                             :element-type '(unsigned-byte 8)

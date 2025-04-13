@@ -207,3 +207,91 @@
              box (make-translate :object box :offset (make-vec3 130 0 65))
              box (make-constant-medium :boundary box :density 0.01d0 :texture (make-colour 1 1 1)))
        box))))
+
+(defun final-scene ()
+  "Book 2 chapter 10."
+  (flet ((ground-boxes ()
+           (loop with ground = (make-lambertian :texture (make-colour 0.48 0.83 0.53))
+                 and boxes-per-side = 20
+                 for i below boxes-per-side
+                 nconcing (loop for j below boxes-per-side
+                                as w = 100
+                                as x0 = (+ -1000 (* i w))
+                                as y0 = 0
+                                as z0 = (+ -1000 (* j w))
+                                as x1 = (+ x0 w)
+                                as y1 = (1+ (random 100d0))
+                                as z1 = (+ z0 w)
+                                collect (make-box :a (make-point3 x0 y0 z0)
+                                                  :b (make-point3 x1 y1 z1)
+                                                  :material ground))
+                   into boxes
+                 finally (return (coerce boxes 'vector))))
+         (sky-boxes ()
+           (loop with white = (make-lambertian :texture (make-colour 0.73 0.73 0.73))
+                 for j below 1000
+                 as x = (random 165d0)
+                 as y = (random 165d0)
+                 as z = (random 165d0)
+                 collecting (make-sphere :centre (make-point3 x y z) :radius 10 :material white)
+                   into boxes
+                 finally
+                    (let ((objects (coerce boxes 'vector)))
+                      (setf objects (make-bvh-node objects)
+                            objects (make-rotate-y :object objects :angle 15)
+                            objects (make-translate :object objects :offset (make-vec3 -100 270 395)))
+                      (return objects)))))
+    (let (world)
+      (push (make-bvh-node (ground-boxes)) world)
+
+      (let ((light (make-diffuse-light :texture (make-colour 7 7 7))))
+        (push (make-quad :q (make-point3 123 554 147)
+                         :u (make-vec3 300 0 0)
+                         :v (make-vec3 0 0 265)
+                         :material light)
+              world))
+
+      (let* ((from (make-point3 400 400 200))
+             (to (point3+ from (make-vec3 30 0 0)))
+             (material (make-lambertian :texture (make-colour 0.7 0.3 0.1))))
+        (push (make-sphere :from from :to to :radius 50 :material material) world))
+
+      (push (make-sphere :centre (make-point3 260 150 45)
+                         :radius 50
+                         :material (make-dielectric :refraction-index 1.5d0))
+            world)
+      (push (make-sphere :centre (make-point3 0 150 145)
+                         :radius 50
+                         :material (make-metal :albedo (make-colour 0.8 0.8 0.9) :fuzz 1d0))
+            world)
+
+      (let ((boundary (make-sphere :centre (make-point3 360 150 145)
+                                   :radius 70
+                                   :material (make-dielectric :refraction-index 1.5d0))))
+        (push boundary world)
+        (push (make-constant-medium :boundary boundary
+                                    :density 0.2
+                                    :texture (make-colour 0.2 0.4 0.9))
+              world))
+      (let ((boundary (make-sphere :centre (make-point3 0 0 0)
+                                   :radius 5000
+                                   :material (make-dielectric :refraction-index 1.5d0))))
+        (push (make-constant-medium :boundary boundary
+                                    :density 0.0001
+                                    :texture (make-colour 1 1 1))
+              world))
+
+      (let* ((image (with-open-file (stream #P"earthmap.png" :element-type '(unsigned-byte 8))
+                      (read-png stream)))
+             (emat (make-lambertian :texture (make-image-texture :image image))))
+        (push (make-sphere :centre (make-point3 400 200 400) :radius 100 :material emat)
+              world))
+      (let ((pertext (make-perlin :scale 0.2d0)))
+        (push (make-sphere :centre (make-point3 220 280 300)
+                           :radius 80
+                           :material (make-lambertian :texture pertext))
+              world))
+
+      (push (sky-boxes) world)
+
+      (coerce world 'vector))))
