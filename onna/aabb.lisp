@@ -67,3 +67,9 @@ Used to ensure that AABBs don't have zero volume."
     (if (> x y)
         (if (> x z) #'aabb-x #'aabb-z)
         (if (> y z) #'aabb-y #'aabb-z))))
+
+(defun aabb+ (aabb v)
+  "Offsets AABB by vector V."
+  (make-aabb :x (interval+ (aabb-x aabb) (vec3-x v))
+             :y (interval+ (aabb-y aabb) (vec3-y v))
+             :z (interval+ (aabb-z aabb) (vec3-z v))))

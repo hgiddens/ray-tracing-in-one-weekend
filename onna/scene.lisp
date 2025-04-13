@@ -87,7 +87,7 @@ Returns a `hit-record' or `nil'."))
 
 (defmethod bounding-box ((seq sequence))
   (let ((aabb (make-aabb)))
-    (dotimes (i (length seq))
+    (dotimes (i (length seq) aabb)
       (setf aabb (make-aabb-from-aabbs aabb (bounding-box (elt seq i)))))))
 
 ;;;; Spheres
@@ -209,3 +209,129 @@ Returns a `hit-record' or `nil'."))
 
 (defmethod bounding-box ((quad quad))
   (quad-aabb quad))
+
+(defun make-box (&key a b material)
+  ;; TODO: Should this be called make-box? Or just box?
+  (let* ((min (make-point3 (min (point3-x a) (point3-x b))
+                           (min (point3-y a) (point3-y b))
+                           (min (point3-z a) (point3-z b))))
+         (max (make-point3 (max (point3-x a) (point3-x b))
+                           (max (point3-y a) (point3-y b))
+                           (max (point3-z a) (point3-z b))))
+         (dx (make-vec3 (- (point3-x max) (point3-x min)) 0 0))
+         (dy (make-vec3 0 (- (point3-y max) (point3-y min)) 0))
+         (dz (make-vec3 0 0 (- (point3-z max) (point3-z min)))))
+    (vector
+     ;; front
+     (make-quad :q (make-point3 (point3-x min) (point3-y min) (point3-z max)) :u dx :v dy :material material)
+     ;; right
+     (make-quad :q (make-point3 (point3-x max) (point3-y min) (point3-z max)) :u (vec3- dz) :v dy :material material)
+     ;; back
+     (make-quad :q (make-point3 (point3-x max) (point3-y min) (point3-z min)) :u (vec3- dx) :v dy :material material)
+     ;; left
+     (make-quad :q (make-point3 (point3-x min) (point3-y min) (point3-z min)) :u dz :v dy :material material)
+     ;; top
+     (make-quad :q (make-point3 (point3-x min) (point3-y max) (point3-z max)) :u dx :v (vec3- dz) :material material)
+     ;; bottom
+     (make-quad :q (make-point3 (point3-x min) (point3-y min) (point3-z min)) :u dx :v dz :material material))))
+
+;;;; Translate
+
+;;; TODO: This is a dumb constructor name, but I think the struct
+;;; representation makes sense? Hah, although another representation that
+;;; (might) work would be having instances (translation, rotation etc) as CLOS
+;;; mixins and using method combinations to handle the translations between
+;;; world and object spaces. It's probably dumb but I'm interested to see how
+;;; it would work and/or look.
+(defstruct (translate
+            (:constructor make-translate
+                (&key object offset
+                 &aux
+                   (aabb (aabb+ (bounding-box object) offset)))))
+  object
+  (offset (make-vec3 0 0 0) :type vec3)
+  (aabb (make-aabb) :type aabb))
+
+(defmethod hit-test (ray (translate translate) ray-interval)
+  (let ((offset-ray (copy-ray ray)))
+    (setf (ray-origin offset-ray) (point3+ (ray-origin ray) (vec3- (translate-offset translate))))
+    (alexandria:when-let ((hit (hit-test offset-ray (translate-object translate) ray-interval)))
+      (setf (hit-record-point hit) (point3+ (hit-record-point hit) (translate-offset translate)))
+      hit)))
+
+(defmethod bounding-box ((translate translate))
+  (translate-aabb translate))
+
+;;;; Rotations
+
+;; TODO: As the name suggests, rotates only in the Y axis. Surely we just use
+;; matrices here and move on with our lives, right? Right?
+(defstruct (rotate-y
+            (:constructor make-rotate-y
+                (&key object angle
+                 &aux
+                   (radians (/ (* angle pi) 180d0))
+                   (sin-theta (sin radians))
+                   (cos-theta (cos radians))
+                   ;; TODO: This is an extremely literal translation of the C++
+                   ;; and consequently gross.
+                   (aabb (loop with bbox = (bounding-box object)
+                               with min = (make-point3 #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY
+                                                       #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY
+                                                       #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)
+                               with max = (make-point3 #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY
+                                                       #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY
+                                                       #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY)
+                               for i below 2 do
+                                 (loop for j below 2 do
+                                   (loop for k below 2
+                                         as x = (let ((n (aabb-x bbox)))
+                                                  (+ (* (interval-max n) i) (* (interval-min n) (- 1 i))))
+                                         as y = (let ((n (aabb-y bbox)))
+                                                  (+ (* (interval-max n) j) (* (interval-min n) (- 1 j))))
+                                         as z = (let ((n (aabb-z bbox)))
+                                                  (+ (* (interval-max n) k) (* (interval-min n) (- 1 k))))
+                                         as new-x = (+ (* cos-theta x) (* sin-theta z))
+                                         as new-z = (+ (* (- sin-theta) x) (* cos-theta z))
+                                         do (setf (point3-x min) (min (point3-x min) new-x)
+                                                  (point3-x max) (max (point3-x max) new-x)
+                                                  (point3-y min) (min (point3-y min) y)
+                                                  (point3-y max) (max (point3-y max) y)
+                                                  (point3-z min) (min (point3-z min) new-z)
+                                                  (point3-z max) (max (point3-z max) new-z))))
+                               finally (return (make-aabb-from-points min max)))))))
+  object
+  (sin-theta 0d0 :type double-float)
+  (cos-theta 0d0 :type double-float)
+  (aabb (make-aabb) :type aabb))
+
+(defmethod hit-test (ray (rotate rotate-y) ray-interval)
+  ;; Transform the ray from world space to object space.
+  (flet ((transform (o)
+           ;; Because point3 includes vec3 and has no extra slots, we can just
+           ;; do the same operation to both points and vectors.
+           (setf o (copy-structure o))
+           (psetf
+            (vec3-x o) (- (* (rotate-y-cos-theta rotate) (vec3-x o))
+                          (* (rotate-y-sin-theta rotate) (vec3-z o)))
+            (vec3-z o) (+ (* (rotate-y-sin-theta rotate) (vec3-x o))
+                          (* (rotate-y-cos-theta rotate) (vec3-z o))))
+           o)
+         (untransform (o)
+           (setf o (copy-structure o))
+           (psetf
+            (vec3-x o) (+ (* (rotate-y-cos-theta rotate) (vec3-x o))
+                          (* (rotate-y-sin-theta rotate) (vec3-z o)))
+            (vec3-z o) (+ (* (- (rotate-y-sin-theta rotate)) (vec3-x o))
+                          (* (rotate-y-cos-theta rotate) (vec3-z o))))
+           o))
+    (let ((transformed-ray (copy-ray ray)))
+      (setf (ray-origin transformed-ray) (transform (ray-origin ray))
+            (ray-direction transformed-ray) (transform (ray-direction ray)))
+      (alexandria:when-let ((hit (hit-test transformed-ray (rotate-y-object rotate) ray-interval)))
+        (setf (hit-record-point hit) (untransform (hit-record-point hit))
+              (hit-record-normal hit) (untransform (hit-record-normal hit)))
+        hit))))
+
+(defmethod bounding-box ((rotate rotate-y))
+  (rotate-y-aabb rotate))

@@ -155,3 +155,8 @@
 
 (defun interval-size (i)
   (- (interval-max i) (interval-min i)))
+
+(defun interval+ (i d)
+  "Shifts interval I by delta D."
+  (make-interval :min (+ (interval-min i) d)
+                 :max (+ (interval-max i) d)))
