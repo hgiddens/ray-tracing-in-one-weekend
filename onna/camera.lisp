@@ -18,6 +18,7 @@
 (defstruct (camera (:constructor nil))
   (centre (make-point3 0 0 0) :type point3)
   (samples-per-pixel 1 :type (integer 0))
+  (reciprocal-root-samples-per-pixel 1 :type (real 0 1))
   (max-depth 0 :type (integer 0))
   (background-colour (make-colour 0 0 0) :type colour)
   (image-width 1 :type (integer 0))
@@ -33,7 +34,7 @@
 (defun make-camera (&key
                       (aspect-ratio (/ 16 9))
                       (image-width 400)
-                      (samples-per-pixel 10)
+                      (samples-per-pixel 9)
                       (max-depth 10)
                       (background-colour (make-colour 0.7 0.8 1))
                       (vertical-fov 90)
@@ -45,6 +46,7 @@
                       ;; Distance from look-from to the plane of perfect focus.
                       (focus-distance 10))
   (setf aspect-ratio (coerce aspect-ratio 'double-float)
+        samples-per-pixel (expt (floor (sqrt samples-per-pixel)) 2)
         vertical-fov (coerce vertical-fov 'double-float)
         defocus-angle (coerce defocus-angle 'double-float)
         focus-distance (coerce focus-distance 'double-float))
@@ -90,6 +92,7 @@
            (defocus-disc-v (scaled-vec3 v defocus-radius)))
       (setf (camera-centre camera) centre
             (camera-samples-per-pixel camera) samples-per-pixel
+            (camera-reciprocal-root-samples-per-pixel camera) (/ (floor (sqrt samples-per-pixel)))
             (camera-max-depth camera) max-depth
             (camera-background-colour camera) background-colour
             (camera-image-width camera) image-width
@@ -134,12 +137,18 @@
                          (scaled-vec3 (camera-defocus-disc-u camera) u-scale)
                          (scaled-vec3 (camera-defocus-disc-v camera) v-scale)))))
 
-(defun get-ray (camera i j)
-  "Constructs a ray from the defocus disc of CAMERA to a sampled point in pixel I, J."
-  (flet ((sample-square ()
-           "A vector to a random point in the [-.5,-.5]-[+.5,+.5] unit square"
-           (make-vec3 (- (random 1d0) 0.5) (- (random 1d0) 0.5) 0)))
-    (let* ((offset (sample-square))
+(defun get-ray (camera i j si sj)
+  "A ray from the defocus disc of CAMERA to a sampled point in pixel I, J for sample square SI, SJ."
+  (flet ((sample-square-stratified ()
+           "A vector to a random point in the square sub-pixel.
+
+Square is specified by grid indices SI and SJ for an idealized unit square
+pixel [-.5,-.5] to [+.5,+.5]."
+           (make-vec3
+            (- (* (+ si (random 1d0)) (camera-reciprocal-root-samples-per-pixel camera)) 0.5)
+            (- (* (+ sj (random 1d0)) (camera-reciprocal-root-samples-per-pixel camera)) 0.5)
+            0)))
+    (let* ((offset (sample-square-stratified))
            (pixel-sample (point3+ (camera-pixel-0-0-loc camera)
                                   (scaled-vec3 (camera-pixel-delta-u camera) (+ i (vec3-x offset)))
                                   (scaled-vec3 (camera-pixel-delta-v camera) (+ j (vec3-y offset)))))
@@ -151,14 +160,16 @@
 (defun render (camera world)
   (let* ((image (make-array (list (camera-image-height camera) (camera-image-width camera))
                             :element-type 'colour
-                            :initial-element (make-colour 0 0 0))))
+                            :initial-element (make-colour 0 0 0)))
+         (sqrt-spp (floor (sqrt (camera-samples-per-pixel camera)))))
     (loop for j from 0 below (camera-image-height camera) do
       (loop for i from 0 below (camera-image-width camera) do
-        (loop repeat (camera-samples-per-pixel camera)
-              collecting (ray-colour (get-ray camera i j)
-                                     world
-                                     (camera-max-depth camera)
-                                     (camera-background-colour camera))
+        (loop for sj below sqrt-spp
+              nconcing (loop for si below sqrt-spp
+                             collect (ray-colour (get-ray camera i j si sj)
+                                                 world
+                                                 (camera-max-depth camera)
+                                                 (camera-background-colour camera)))
                 into samples
               finally (setf (aref image j i) (blend-colours samples)))))
     image))
