@@ -117,11 +117,18 @@
                                            (hit-record-v hit)
                                            (hit-record-point hit))))
         (alexandria:if-let ((scattered (scatter ray hit)))
-          (let ((colour-from-scatter (attenuate (ray-colour (scatter-record-scattered scattered)
-                                                            world
-                                                            (1- depth)
-                                                            background-colour)
-                                                (scatter-record-attenuation scattered))))
+          (let* ((scattering-pdf (scattering-pdf (hit-record-material hit)
+                                                 ray
+                                                 hit
+                                                 scattered))
+                 (pdf-value scattering-pdf)
+                 (colour-from-scatter (attenuate (ray-colour (scatter-record-scattered scattered)
+                                                             world
+                                                             (1- depth)
+                                                             background-colour)
+                                                 (scatter-record-attenuation scattered)
+                                                 (let ((c (/ scattering-pdf pdf-value)))
+                                                   (make-colour c c c)))))
             (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
                          (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
                          (+ (colour-b colour-from-emission) (colour-b colour-from-scatter))))

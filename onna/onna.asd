@@ -11,10 +11,11 @@
                (:file "vec" :depends-on ("package"))
                (:file "ray" :depends-on ("package" "vec"))
                (:file "aabb" :depends-on ("package" "vec"))
+               (:file "onb" :depends-on ("package" "vec"))
                (:file "camera" :depends-on ("package" "vec" "ray" "colour" "image"))
                (:file "texture" :depends-on ("package" "colour"))
                (:file "scene" :depends-on ("package" "ray" "vec" "aabb" "material"))
-               (:file "material" :depends-on ("package" "vec" "colour" "texture"))
+               (:file "material" :depends-on ("package" "vec" "colour" "texture" "onb"))
                (:file "scenes" :depends-on ("package" "scene" "vec" "material"))
                (:file "onna" :depends-on ("package" "camera" "scenes" "image")))
   :depends-on (:alexandria

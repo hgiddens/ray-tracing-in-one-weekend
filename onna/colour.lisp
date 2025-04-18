@@ -33,7 +33,10 @@
   (with-slots (r g b) c
     (make-colour (sqrt r) (sqrt g) (sqrt b))))
 
-(defun attenuate (c d)
-  (make-colour (* (colour-r c) (colour-r d))
-               (* (colour-g c) (colour-g d))
-               (* (colour-b c) (colour-b d))))
+(defun attenuate (c &rest ds)
+  (setf c (copy-colour c))
+  (with-slots (r g b) c
+    (dolist (d ds c)
+      (setf r (* r (colour-r d))
+            g (* g (colour-g d))
+            b (* b (colour-b d))))))
