@@ -104,7 +104,7 @@
             (camera-defocus-disc-v camera) defocus-disc-v)
       camera)))
 
-(defun ray-colour (ray world depth background-colour)
+(defun ray-colour (ray world lights depth background-colour)
   ;; TODO: This function is gross now.
   ;; If we've exceeded the ray bounce limit, no more light is gathered.
   (when (<= depth 0)
@@ -119,38 +119,29 @@
                                            (hit-record-v hit)
                                            (hit-record-point hit))))
         (alexandria:if-let ((scattered (scatter ray hit)))
-          (let* ((on-light (make-point3 (+ 213d0 (random 130d0)) 554 (+ 227d0 (random 105d0))))
-                 (to-light (point3- on-light (hit-record-point hit)))
-                 (distance-squared (vec3-length-squared to-light)))
-            (setf to-light (unit-vec3 to-light))
-
-            (when (minusp (dot-product to-light (hit-record-normal hit)))
-              (return-from ray-colour colour-from-emission))
-
-            (let ((light-area (* (- 343 213) (- 332 227)))
-                  (light-cosine (abs (vec3-y to-light))))
-              (when (< light-cosine 0.000001)
-                (return-from ray-colour colour-from-emission))
-
-              (let ((pdf-value (/ distance-squared (* light-cosine light-area))))
-                (setf (scatter-record-scattered scattered) (make-ray :origin (hit-record-point hit)
-                                                                     :direction to-light
-                                                                     :time (ray-time ray)))
-                (let* ((scattering-pdf (scattering-pdf (hit-record-material hit)
-                                                       ray
-                                                       hit
-                                                       scattered))
-
-                       (colour-from-scatter (attenuate (ray-colour (scatter-record-scattered scattered)
-                                                                   world
-                                                                   (1- depth)
-                                                                   background-colour)
-                                                       (scatter-record-attenuation scattered)
-                                                       (let ((c (/ scattering-pdf pdf-value)))
-                                                         (make-colour c c c)))))
-                  (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
-                               (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
-                               (+ (colour-b colour-from-emission) (colour-b colour-from-scatter)))))))
+          (multiple-value-bind (direction pdf-value)
+              (pdf-direction (make-mixture-pdf
+                              (make-hittable-pdf :objects lights :origin (hit-record-point hit))
+                              (make-cosine-pdf (hit-record-normal hit))))
+            (setf (scatter-record-scattered scattered) (make-ray :origin (hit-record-point hit)
+                                                                 :direction direction
+                                                                 :time (ray-time ray)))
+            (let* ((scattering-pdf (scattering-pdf (hit-record-material hit)
+                                                   ray
+                                                   hit
+                                                   scattered))
+                   (sample-colour (ray-colour (scatter-record-scattered scattered)
+                                              world
+                                              lights
+                                              (1- depth)
+                                              background-colour))
+                   (colour-from-scatter (attenuate sample-colour
+                                                   (scatter-record-attenuation scattered)
+                                                   (let ((c (/ scattering-pdf pdf-value)))
+                                                     (make-colour c c c)))))
+              (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
+                           (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
+                           (+ (colour-b colour-from-emission) (colour-b colour-from-scatter)))))
           colour-from-emission))
       background-colour)))
 
@@ -183,7 +174,7 @@ pixel [-.5,-.5] to [+.5,+.5]."
                 :direction (point3- pixel-sample origin)
                 :time (random 1d0)))))
 
-(defun render (camera world)
+(defun render (camera world lights)
   (let* ((image (make-array (list (camera-image-height camera) (camera-image-width camera))
                             :element-type 'colour
                             :initial-element (make-colour 0 0 0)))
@@ -194,6 +185,7 @@ pixel [-.5,-.5] to [+.5,+.5]."
               nconcing (loop for si below sqrt-spp
                              collect (ray-colour (get-ray camera i j si sj)
                                                  world
+                                                 lights
                                                  (camera-max-depth camera)
                                                  (camera-background-colour camera)))
                 into samples

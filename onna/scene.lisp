@@ -27,7 +27,20 @@
 
 Returns a `hit-record' or `nil'."))
 
-(defgeneric bounding-box (object))
+(defgeneric bounding-box (object)
+  (:documentation
+   "The axis-aligned bounding box for OBJECT; see `aabb'."))
+
+;;; TODO: I hate this name. Maybe make pdf-value take (maybe with keywords?)
+;;; an origin too and then just have pdf-value everywhere?
+(defgeneric object-pdf-value (object origin direction)
+  (:documentation
+   "The distribution value of a ray from ORIGIN in DIRECTION hitting OBJECT."))
+
+;;; TODO: On the surface of? In the volume of? Probably the latter if I want
+;;; an easy implementation for e.g. sequences?
+(defgeneric random-point (object)
+  (:documentation "Generates a random point on OBJECT."))
 
 ;;;; BVH
 
@@ -172,7 +185,8 @@ Returns a `hit-record' or `nil'."))
                              (diagonal-2 (make-aabb-from-points (point3+ q u) (point3+ q v))))
                          (make-aabb-from-aabbs diagonal-1 diagonal-2)))
                  (normal (unit-vec3 n))
-                 (d (dot-product normal q)))))
+                 (d (dot-product normal q))
+                 (area (vec3-length n)))))
   (q (make-point3 0 0 0) :type point3)
   (u (make-vec3 0 0 0) :type vec3)
   (v (make-vec3 0 0 0) :type vec3)
@@ -181,7 +195,8 @@ Returns a `hit-record' or `nil'."))
   ;; TODO: Same question as with spheres above: why is this here?
   (aabb (make-aabb) :type aabb)
   (normal (make-vec3 0 0 0) :type vec3)
-  (d 0d0 :type double-float))
+  (d 0d0 :type double-float)
+  (area 0d0 :type double-float))
 
 (defmethod hit-test (ray (quad quad) ray-interval)
   (let ((denom (dot-product (quad-normal quad) (ray-direction ray))))
@@ -209,6 +224,30 @@ Returns a `hit-record' or `nil'."))
 
 (defmethod bounding-box ((quad quad))
   (quad-aabb quad))
+
+(defmethod object-pdf-value ((quad quad) origin direction)
+  ;; TODO: This doesn't "need" to specify a time because quads can't move, but
+  ;; this is just filthy code.
+  ;;
+  ;; I also don't understand how this works (the results get bigger as the
+  ;; quad gets further from the origin, or am I missing something)? How does
+  ;; this some to 1? What the actual fuck is going on here?
+  (alexandria:if-let ((hit (hit-test (make-ray :origin origin :direction direction)
+                                     quad
+                                     (make-interval :min 0.001
+                                                    :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
+    (let ((distance-squared (* (hit-record-time hit)
+                               (hit-record-time hit)
+                               (vec3-length-squared direction)))
+          (cosine (abs (/ (dot-product direction (hit-record-normal hit))
+                          (vec3-length direction)))))
+      (/ distance-squared (* cosine (quad-area quad))))
+    0))
+
+(defmethod random-point ((quad quad))
+  (point3+ (quad-q quad)
+           (scaled-vec3 (quad-u quad) (random 1d0))
+           (scaled-vec3 (quad-v quad) (random 1d0))))
 
 (defun make-box (&key a b material)
   ;; TODO: Should this be called make-box? Or just box?
