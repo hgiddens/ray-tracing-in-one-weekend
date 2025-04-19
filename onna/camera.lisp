@@ -113,25 +113,44 @@
                                  :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
     (alexandria:if-let ((hit (hit-test ray world interval)))
       (let ((colour-from-emission (emitted (hit-record-material hit)
+                                           ray
+                                           hit  ; TODO: this is so dumb
                                            (hit-record-u hit)
                                            (hit-record-v hit)
                                            (hit-record-point hit))))
         (alexandria:if-let ((scattered (scatter ray hit)))
-          (let* ((scattering-pdf (scattering-pdf (hit-record-material hit)
-                                                 ray
-                                                 hit
-                                                 scattered))
-                 (pdf-value scattering-pdf)
-                 (colour-from-scatter (attenuate (ray-colour (scatter-record-scattered scattered)
-                                                             world
-                                                             (1- depth)
-                                                             background-colour)
-                                                 (scatter-record-attenuation scattered)
-                                                 (let ((c (/ scattering-pdf pdf-value)))
-                                                   (make-colour c c c)))))
-            (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
-                         (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
-                         (+ (colour-b colour-from-emission) (colour-b colour-from-scatter))))
+          (let* ((on-light (make-point3 (+ 213d0 (random 130d0)) 554 (+ 227d0 (random 105d0))))
+                 (to-light (point3- on-light (hit-record-point hit)))
+                 (distance-squared (vec3-length-squared to-light)))
+            (setf to-light (unit-vec3 to-light))
+
+            (when (minusp (dot-product to-light (hit-record-normal hit)))
+              (return-from ray-colour colour-from-emission))
+
+            (let ((light-area (* (- 343 213) (- 332 227)))
+                  (light-cosine (abs (vec3-y to-light))))
+              (when (< light-cosine 0.000001)
+                (return-from ray-colour colour-from-emission))
+
+              (let ((pdf-value (/ distance-squared (* light-cosine light-area))))
+                (setf (scatter-record-scattered scattered) (make-ray :origin (hit-record-point hit)
+                                                                     :direction to-light
+                                                                     :time (ray-time ray)))
+                (let* ((scattering-pdf (scattering-pdf (hit-record-material hit)
+                                                       ray
+                                                       hit
+                                                       scattered))
+
+                       (colour-from-scatter (attenuate (ray-colour (scatter-record-scattered scattered)
+                                                                   world
+                                                                   (1- depth)
+                                                                   background-colour)
+                                                       (scatter-record-attenuation scattered)
+                                                       (let ((c (/ scattering-pdf pdf-value)))
+                                                         (make-colour c c c)))))
+                  (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
+                               (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
+                               (+ (colour-b colour-from-emission) (colour-b colour-from-scatter)))))))
           colour-from-emission))
       background-colour)))
 

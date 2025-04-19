@@ -6,7 +6,7 @@
   ;; TODO: This is a terrible name; if it's a double it's not a function.
   (pdf 0d0 :type double-float))
 
-(defgeneric emitted (material u v p)
+(defgeneric emitted (material ray hit u v p)
   (:documentation "Colour emitted by MATERIAL at point P and texture coördinates U,V."))
 
 (defgeneric scatter* (material ray hit-point hit-normal hit-front-face hit-u hit-v))
@@ -37,8 +37,8 @@ Returns a `scatter-record' or `nil'."
 
 ;;;; Null material
 
-(defmethod emitted ((material null) u v p)
-  (declare (ignore u v p))
+(defmethod emitted ((material null) ray hit u v p)
+  (declare (ignore ray hit u v p))
   (make-colour 0 0 0))
 
 ;;; I'm not sure this is a good idea, but means that old scenes keep working?
@@ -54,8 +54,8 @@ Returns a `scatter-record' or `nil'."
 (defstruct lambertian
   (texture (make-colour 0 0 0)))
 
-(defmethod emitted ((material lambertian) u v p)
-  (declare (ignore u v p))
+(defmethod emitted ((material lambertian) ray hit u v p)
+  (declare (ignore ray hit u v p))
   (make-colour 0 0 0))
 
 (defmethod scatter* ((material lambertian) ray hit-point hit-normal hit-front-face hit-u hit-v)
@@ -89,9 +89,16 @@ Returns a `scatter-record' or `nil'."
        :pdf (/ (dot-product (onb-w uvw) scatter-direction) pi)))))
 
 (defmethod scattering-pdf ((material lambertian) ray hit scattered)
-  (let ((cos-θ (dot-product (hit-record-normal hit)
-                            (unit-vec3 (ray-direction (scatter-record-scattered scattered))))))
-    (if (minusp cos-θ) 0d0 (/ cos-θ pi))))
+  ;; TODO: wtf?
+  ;; In book 3 § 6.3, we replace the lambertian implementation with a
+  ;; non-lambertian one, but I'm not sure when we're going to change this
+  ;; back? Anyway, we need the uniform hemispherical implementation to match
+  ;; the pictures in the book.
+  ;;
+  ;; (let ((cos-θ (dot-product (hit-record-normal hit)
+  ;;                           (unit-vec3 (ray-direction (scatter-record-scattered scattered))))))
+  ;;   (if (minusp cos-θ) 0d0 (/ cos-θ pi)))
+  (/ (* 2 pi)))
 
 ;;;; Metal
 
@@ -99,8 +106,8 @@ Returns a `scatter-record' or `nil'."
   (albedo (make-colour 0 0 0) :type colour)
   (fuzz 0d0 :type (double-float 0d0 1d0)))
 
-(defmethod emitted ((material metal) u v p)
-  (declare (ignore u v p))
+(defmethod emitted ((material metal) ray hit u v p)
+  (declare (ignore ray hit u v p))
   (make-colour 0 0 0))
 
 (defmethod scatter* ((material metal) ray hit-point hit-normal hit-front-face hit-u hit-v)
@@ -121,8 +128,8 @@ Returns a `scatter-record' or `nil'."
   ;; refractive index over the refractive index of the enclosing media.
   (refraction-index 0d0 :type double-float))
 
-(defmethod emitted ((material dielectric) u v p)
-  (declare (ignore u v p))
+(defmethod emitted ((material dielectric) ray hit u v p)
+  (declare (ignore ray hit u v p))
   (make-colour 0 0 0))
 
 (defun reflectance (cosine refraction-index)
@@ -155,8 +162,11 @@ Returns a `scatter-record' or `nil'."
 
 ;;; TODO: it's probably a code smell that all these materials have either an
 ;;; implementation for emitted or scatter, but not both.
-(defmethod emitted ((light diffuse-light) u v p)
-  (texture-value (diffuse-light-texture light) u v p))
+(defmethod emitted ((light diffuse-light) ray hit u v p)
+  (declare (ignore ray))
+  (if (hit-record-front-face hit)
+      (texture-value (diffuse-light-texture light) u v p)
+      (make-colour 0 0 0)))
 
 (defmethod scatter* ((light diffuse-light) ray hit-point hit-normal hit-front-face hit-u hit-v)
   nil)
@@ -165,8 +175,8 @@ Returns a `scatter-record' or `nil'."
 
 (defstruct isotropic texture)
 
-(defmethod emitted ((iso isotropic) u v p)
-  (declare (ignore u v p))
+(defmethod emitted ((iso isotropic) ray hit u v p)
+  (declare (ignore ray hit u v p))
   (make-colour 0 0 0))
 
 (defmethod scatter* ((iso isotropic) ray hit-point hit-normal hit-front-face hit-u hit-v)
