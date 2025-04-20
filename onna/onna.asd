@@ -16,7 +16,7 @@
                (:file "camera" :depends-on ("package" "vec" "ray" "colour" "image" "pdf"))
                (:file "texture" :depends-on ("package" "colour"))
                (:file "scene" :depends-on ("package" "ray" "vec" "aabb" "material"))
-               (:file "material" :depends-on ("package" "vec" "colour" "texture" "onb"))
+               (:file "material" :depends-on ("package" "vec" "colour" "texture" "pdf"))
                (:file "scenes" :depends-on ("package" "scene" "vec" "material"))
                (:file "onna" :depends-on ("package" "camera" "scenes" "image")))
   :depends-on (:alexandria

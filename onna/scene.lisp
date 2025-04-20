@@ -38,9 +38,11 @@ Returns a `hit-record' or `nil'."))
    "The distribution value of a ray from ORIGIN in DIRECTION hitting OBJECT."))
 
 ;;; TODO: On the surface of? In the volume of? Probably the latter if I want
-;;; an easy implementation for e.g. sequences?
-(defgeneric random-point (object)
-  (:documentation "Generates a random point on OBJECT."))
+;;; an easy implementation for e.g. sequences? Ok, so book 3 § 12.3 talks
+;;; about this: it's a uniformly sampled point (in terms of degrees) of the
+;;; visible face of the sphere.
+(defgeneric random-direction (object origin)
+  (:documentation "Generates a random direction vector onto OBJECT from ORIGIN."))
 
 ;;;; BVH
 
@@ -102,6 +104,17 @@ Returns a `hit-record' or `nil'."))
   (let ((aabb (make-aabb)))
     (dotimes (i (length seq) aabb)
       (setf aabb (make-aabb-from-aabbs aabb (bounding-box (elt seq i)))))))
+
+(defmethod object-pdf-value ((seq sequence) origin direction)
+  (let* ((length (length seq))
+         (weight (coerce (/ length) 'double-float))
+         (sum 0d0))
+    (dotimes (i length sum)
+      (incf sum (* weight (object-pdf-value (elt seq i) origin direction))))))
+
+(defmethod random-direction ((seq sequence) origin)
+  (let ((i (random (length seq))))
+    (random-direction (elt seq i) origin)))
 
 ;;;; Spheres
 
@@ -171,22 +184,52 @@ Returns a `hit-record' or `nil'."))
 (defmethod bounding-box ((sphere sphere))
   (sphere-aabb sphere))
 
+(defmethod object-pdf-value ((sphere sphere) origin direction)
+  ;; TODO: The book notes that this only works on stationary spheres. Duh.
+  (alexandria:if-let ((hit (hit-test (make-ray :origin origin
+                                               :direction direction)
+                                     sphere
+                                     (make-interval :min 0.001
+                                                    :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
+    (let* ((direction (point3- (point-at-time (sphere-centre sphere) 0d0) origin))
+           (distance-squared (vec3-length-squared direction))
+           (radius (sphere-radius sphere))
+           (cos-θ-max (sqrt (- 1 (/ (* radius radius) distance-squared))))
+           (solid-angle (* 2 pi (- 1 cos-θ-max))))
+      (/ solid-angle))
+    0d0))
+
+(defmethod random-direction ((sphere sphere) origin)
+  (flet ((random-to-sphere (radius distance-squared)
+           (let* ((r1 (random 1d0))
+                  (r2 (random 1d0))
+                  (z (1+ (* r2 (- (sqrt (- 1 (/ (* radius radius) distance-squared))) 1))))
+
+                  (φ (* 2 pi r1))
+                  (x (* (cos φ) (sqrt (- 1 (* z z)))))
+                  (y (* (sin φ) (sqrt (- 1 (* z z))))))
+             (make-vec3 x y z))))
+    (let* ((direction (point3- (point-at-time (sphere-centre sphere) 0d0) origin))
+           (distance-squared (vec3-length-squared direction))
+           (uvw (make-onb direction)))
+      (onb-transform uvw (random-to-sphere (sphere-radius sphere) distance-squared)))))
+
 ;;;; Quadrilaterals
 
 (defstruct (quad
             (:constructor make-quad
-              (&key q u v material
-               &aux
-                 (n (cross-product u v))
-                 ;; This will "deliberately" divide by zero if the u and v
-                 ;; basis vectors are parallel.
-                 (w (scaled-vec3 n (/ (dot-product n n))))
-                 (aabb (let ((diagonal-1 (make-aabb-from-points q (point3+ q u v)))
-                             (diagonal-2 (make-aabb-from-points (point3+ q u) (point3+ q v))))
-                         (make-aabb-from-aabbs diagonal-1 diagonal-2)))
-                 (normal (unit-vec3 n))
-                 (d (dot-product normal q))
-                 (area (vec3-length n)))))
+                (&key q u v material
+                 &aux
+                   (n (cross-product u v))
+                   ;; This will "deliberately" divide by zero if the u and v
+                   ;; basis vectors are parallel.
+                   (w (scaled-vec3 n (/ (dot-product n n))))
+                   (aabb (let ((diagonal-1 (make-aabb-from-points q (point3+ q u v)))
+                               (diagonal-2 (make-aabb-from-points (point3+ q u) (point3+ q v))))
+                           (make-aabb-from-aabbs diagonal-1 diagonal-2)))
+                   (normal (unit-vec3 n))
+                   (d (dot-product normal q))
+                   (area (vec3-length n)))))
   (q (make-point3 0 0 0) :type point3)
   (u (make-vec3 0 0 0) :type vec3)
   (v (make-vec3 0 0 0) :type vec3)
@@ -244,10 +287,12 @@ Returns a `hit-record' or `nil'."))
       (/ distance-squared (* cosine (quad-area quad))))
     0))
 
-(defmethod random-point ((quad quad))
-  (point3+ (quad-q quad)
-           (scaled-vec3 (quad-u quad) (random 1d0))
-           (scaled-vec3 (quad-v quad) (random 1d0))))
+(defmethod random-direction ((quad quad) origin)
+  (point3-
+   (point3+ (quad-q quad)
+            (scaled-vec3 (quad-u quad) (random 1d0))
+            (scaled-vec3 (quad-v quad) (random 1d0)))
+   origin))
 
 (defun make-box (&key a b material)
   ;; TODO: Should this be called make-box? Or just box?

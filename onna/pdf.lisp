@@ -53,7 +53,7 @@
   (object-pdf-value (hittable-pdf-objects pdf) (hittable-pdf-origin pdf) direction))
 
 (defmethod pdf-generate ((pdf hittable-pdf))
-  (point3- (random-point (hittable-pdf-objects pdf)) (hittable-pdf-origin pdf)))
+  (random-direction (hittable-pdf-objects pdf) (hittable-pdf-origin pdf)))
 
 ;;;; Weighted mixture of PDFs
 

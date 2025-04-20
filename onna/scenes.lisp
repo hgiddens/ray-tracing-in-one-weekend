@@ -182,12 +182,14 @@
       (let ((box (make-box :a (make-point3 0 0 0) :b (make-point3 165 330 165) :material white)))
         (make-translate :object (make-rotate-y :object box :angle 15)
                         :offset (make-vec3 265 0 295)))
-      (let ((box (make-box :a (make-point3 0 0 0) :b (make-point3 165 165 165) :material white)))
-        (make-translate :object (make-rotate-y :object box :angle -18)
-                        :offset (make-vec3 130 0 65))))
+      (make-sphere :centre (make-point3 190 90 190)
+                   :radius 90
+                   :material (make-dielectric :refraction-index 1.5d0)))
 
      ;; Lights
-     (make-quad :q (make-point3 343 554 332) :u (make-vec3 -130 0 0) :v (make-vec3 0 0 -105))
+     (vector
+      (make-quad :q (make-point3 343 554 332) :u (make-vec3 -130 0 0) :v (make-vec3 0 0 -105))
+      (make-sphere :centre (make-point3 190 90 190) :radius 90))
      )))
 
 (defun cornell-smoke ()

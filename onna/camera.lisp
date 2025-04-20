@@ -119,29 +119,32 @@
                                            (hit-record-v hit)
                                            (hit-record-point hit))))
         (alexandria:if-let ((scattered (scatter ray hit)))
-          (multiple-value-bind (direction pdf-value)
-              (pdf-direction (make-mixture-pdf
-                              (make-hittable-pdf :objects lights :origin (hit-record-point hit))
-                              (make-cosine-pdf (hit-record-normal hit))))
-            (setf (scatter-record-scattered scattered) (make-ray :origin (hit-record-point hit)
-                                                                 :direction direction
-                                                                 :time (ray-time ray)))
-            (let* ((scattering-pdf (scattering-pdf (hit-record-material hit)
-                                                   ray
-                                                   hit
-                                                   scattered))
-                   (sample-colour (ray-colour (scatter-record-scattered scattered)
-                                              world
-                                              lights
-                                              (1- depth)
-                                              background-colour))
-                   (colour-from-scatter (attenuate sample-colour
-                                                   (scatter-record-attenuation scattered)
-                                                   (let ((c (/ scattering-pdf pdf-value)))
-                                                     (make-colour c c c)))))
-              (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
-                           (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
-                           (+ (colour-b colour-from-emission) (colour-b colour-from-scatter)))))
+          (if (null (scatter-record-pdf scattered))
+              (attenuate (ray-colour (scatter-record-skip-pdf-ray scattered)
+                                     world
+                                     lights
+                                     (1- depth)
+                                     background-colour)
+                         (scatter-record-attenuation scattered))
+              (multiple-value-bind (direction pdf-value)
+                  (pdf-direction (make-mixture-pdf
+                                  (make-hittable-pdf :objects lights :origin (hit-record-point hit))
+                                  (scatter-record-pdf scattered)))
+                (let* ((scattered-ray (make-ray :origin (hit-record-point hit)
+                                                :direction direction
+                                                :time (ray-time ray)))
+                       (scattering-pdf (scattering-pdf (hit-record-material hit)
+                                                       ray
+                                                       hit
+                                                       scattered-ray))
+                       (sample-colour (ray-colour scattered-ray world lights (1- depth) background-colour))
+                       (colour-from-scatter (attenuate sample-colour
+                                                       (scatter-record-attenuation scattered)
+                                                       (let ((c (/ scattering-pdf pdf-value)))
+                                                         (make-colour c c c)))))
+                  (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
+                               (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
+                               (+ (colour-b colour-from-emission) (colour-b colour-from-scatter))))))
           colour-from-emission))
       background-colour)))
 
