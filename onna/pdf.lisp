@@ -25,7 +25,7 @@
 ;;;; Cosine density
 
 (defstruct (cosine-pdf (:constructor make-cosine-pdf (w &aux (uvw (make-onb w)))))
-  (uvw (make-onb (make-vec3 0 0 0)) :type onb))
+  (uvw (make-onb (make-vec3 0 0 0)) :type onb :read-only t))
 
 (defmethod pdf-value ((pdf cosine-pdf) direction)
   (let ((cosine-θ (dot-product (unit-vec3 direction) (onb-w (cosine-pdf-uvw pdf)))))
@@ -46,8 +46,8 @@
 ;;;; Sampling directions towards a hittable
 
 (defstruct hittable-pdf
-  objects
-  (origin (make-point3 0 0 0) :type point3))
+  (objects nil :read-only t)
+  (origin (make-point3 0 0 0) :type point3 :read-only t))
 
 (defmethod pdf-value ((pdf hittable-pdf) direction)
   (object-pdf-value (hittable-pdf-objects pdf) (hittable-pdf-origin pdf) direction))
@@ -58,8 +58,8 @@
 ;;;; Weighted mixture of PDFs
 
 (defstruct (mixture-pdf (:constructor make-mixture-pdf (p0 p1)))
-  p0
-  p1)
+  (p0 nil :read-only t)
+  (p1 nil :read-only t))
 
 (defmethod pdf-value ((pdf mixture-pdf) direction)
   (+ (* 0.5 (pdf-value (mixture-pdf-p0 pdf) direction))

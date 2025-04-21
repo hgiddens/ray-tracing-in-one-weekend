@@ -6,7 +6,7 @@
   ;; well with this being run primarily from Slime.
   (multiple-value-bind (world lights) (cornell-box)
     (let* ((camera (make-camera :aspect-ratio 1
-                                :samples-per-pixel 1000
+                                :samples-per-pixel 10
                                 :image-width 600
                                 :max-depth 50
                                 :background-colour (make-colour 0 0 0)

@@ -8,19 +8,15 @@
                  &aux
                    (front-face (< (dot-product (ray-direction ray) outward-normal) 0))
                    (normal (if front-face outward-normal (vec3- outward-normal))))))
-  (point (make-point3 0 0 0) :type point3)
+  (point (make-point3 0 0 0) :type point3 :read-only t)
   ;; The normal, facing against the incident ray
-  (normal (make-vec3 0 0 0) :type vec3)
-  (time 0d0 :type double-float)
-  (u 0d0 :type double-float)
-  (v 0d0 :type double-float)
-  front-face
-  material)
+  (normal (make-vec3 0 0 0) :type vec3 :read-only t)
+  (time 0d0 :type double-float :read-only t)
+  (u 0d0 :type double-float :read-only t)
+  (v 0d0 :type double-float :read-only t)
+  (front-face nil :read-only t)
+  (material nil :read-only t))
 
-;;; TODO: I probably want to do the monomorphisation I did before, but I
-;;; wonder if there's a way to automatically do it and/or whether it's
-;;; beneficial when intervals and BVH trees are taken into account. Going to
-;;; ignore it for now.
 (defgeneric hit-test (ray object ray-interval)
   (:documentation
    "Tests OBJECT for a hit from RAY between RAY-TIME-MIN and RAY-TIME-MAX.
@@ -37,12 +33,12 @@ Returns a `hit-record' or `nil'."))
   (:documentation
    "The distribution value of a ray from ORIGIN in DIRECTION hitting OBJECT."))
 
-;;; TODO: On the surface of? In the volume of? Probably the latter if I want
-;;; an easy implementation for e.g. sequences? Ok, so book 3 § 12.3 talks
-;;; about this: it's a uniformly sampled point (in terms of degrees) of the
-;;; visible face of the sphere.
 (defgeneric random-direction (object origin)
-  (:documentation "Generates a random direction vector onto OBJECT from ORIGIN."))
+  (:documentation "Generates a random direction vector onto OBJECT from ORIGIN.
+
+Book 3 chapter 12.3 talks about this in more depth, but in this case, 'onto an
+object' means e.g. for a sphere, a uniformly sampled direction in the solid
+angle of the visible face of the sphere."))
 
 ;;;; BVH
 
@@ -68,9 +64,9 @@ Returns a `hit-record' or `nil'."))
        (setf (bvh-node-left node) (elt objects 0)
              (bvh-node-right node) (elt objects 1)))
       (t
-       (setf objects (sort objects #'< :key (alexandria:compose #'interval-min
-                                                                (longest-axis (bvh-node-aabb node))
-                                                                #'bounding-box)))
+       (flet ((bounding-box-longest-axis-minimum (o)
+                (interval-min (funcall (longest-axis (bvh-node-aabb node)) (bounding-box o)))))
+         (setf objects (sort objects #'< :key #'bounding-box-longest-axis-minimum)))
        (let ((mid (floor object-span 2)))
          (setf (bvh-node-left node) (make-bvh-node (subseq objects 0 mid))
                (bvh-node-right node) (make-bvh-node (subseq objects mid))))))
@@ -80,8 +76,8 @@ Returns a `hit-record' or `nil'."))
   (when (hit-test-aabb ray (bvh-node-aabb node) ray-interval)
     (let* ((hit-left (hit-test ray (bvh-node-left node) ray-interval))
            (right-interval (if hit-left
-                               (make-interval :min (interval-min ray-interval)
-                                              :max (hit-record-time hit-left))
+                               (make-interval (interval-min ray-interval)
+                                              (hit-record-time hit-left))
                                ray-interval))
            (hit-right (hit-test ray (bvh-node-right node) right-interval)))
       (or hit-right hit-left))))
@@ -143,11 +139,11 @@ Returns a `hit-record' or `nil'."))
                                                                 (point3+ c radius-vector)))))
 
                            (make-aabb-from-aabbs box-0 box-1))))))
-  (centre (make-ray) :type ray)
-  (radius 0d0 :type (double-float 0d0))
-  material
+  (centre (make-ray) :type ray :read-only t)
+  (radius 0d0 :type (double-float 0d0) :read-only t)
+  (material nil :read-only t)
   ;; TODO: Why is this stored here and not in the BVH structure?
-  (aabb (make-aabb) :type aabb))
+  (aabb (make-aabb) :type aabb :read-only t))
 
 (defmethod hit-test (ray (sphere sphere) ray-interval)
   (flet ((hit-record-for-root (root centre)
@@ -163,7 +159,6 @@ Returns a `hit-record' or `nil'."))
               :time root
               :u (/ phi (* 2 pi))
               :v (/ theta pi)
-              ;; TODO: I was here! Up to section 4.5 in the book, loading image texture data.
               :material (sphere-material sphere)))))
     (let* ((current-centre (point-at-time (sphere-centre sphere) (ray-time ray)))
            (oc (point3- current-centre (ray-origin ray)))
@@ -185,12 +180,11 @@ Returns a `hit-record' or `nil'."))
   (sphere-aabb sphere))
 
 (defmethod object-pdf-value ((sphere sphere) origin direction)
-  ;; TODO: The book notes that this only works on stationary spheres. Duh.
-  (alexandria:if-let ((hit (hit-test (make-ray :origin origin
-                                               :direction direction)
-                                     sphere
-                                     (make-interval :min 0.001
-                                                    :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
+  (alexandria:if-let ((hit (hit-test
+                            (make-ray :origin origin
+                                      :direction direction)
+                            sphere
+                            (make-interval 0.001 #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
     (let* ((direction (point3- (point-at-time (sphere-centre sphere) 0d0) origin))
            (distance-squared (vec3-length-squared direction))
            (radius (sphere-radius sphere))
@@ -230,16 +224,16 @@ Returns a `hit-record' or `nil'."))
                    (normal (unit-vec3 n))
                    (d (dot-product normal q))
                    (area (vec3-length n)))))
-  (q (make-point3 0 0 0) :type point3)
-  (u (make-vec3 0 0 0) :type vec3)
-  (v (make-vec3 0 0 0) :type vec3)
-  (w (make-vec3 0 0 0) :type vec3)
-  material
+  (q (make-point3 0 0 0) :type point3 :read-only t)
+  (u (make-vec3 0 0 0) :type vec3 :read-only t)
+  (v (make-vec3 0 0 0) :type vec3 :read-only t)
+  (w (make-vec3 0 0 0) :type vec3 :read-only t)
+  (material nil :read-only t)
   ;; TODO: Same question as with spheres above: why is this here?
-  (aabb (make-aabb) :type aabb)
-  (normal (make-vec3 0 0 0) :type vec3)
-  (d 0d0 :type double-float)
-  (area 0d0 :type double-float))
+  (aabb (make-aabb) :type aabb :read-only t)
+  (normal (make-vec3 0 0 0) :type vec3 :read-only t)
+  (d 0d0 :type double-float :read-only t)
+  (area 0d0 :type double-float :read-only t))
 
 (defmethod hit-test (ray (quad quad) ray-interval)
   (let ((denom (dot-product (quad-normal quad) (ray-direction ray))))
@@ -269,16 +263,15 @@ Returns a `hit-record' or `nil'."))
   (quad-aabb quad))
 
 (defmethod object-pdf-value ((quad quad) origin direction)
-  ;; TODO: This doesn't "need" to specify a time because quads can't move, but
-  ;; this is just filthy code.
+  ;; TODO: This is filthy code.
   ;;
   ;; I also don't understand how this works (the results get bigger as the
   ;; quad gets further from the origin, or am I missing something)? How does
-  ;; this some to 1? What the actual fuck is going on here?
-  (alexandria:if-let ((hit (hit-test (make-ray :origin origin :direction direction)
-                                     quad
-                                     (make-interval :min 0.001
-                                                    :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
+  ;; this sum to 1? What the actual fuck is going on here?
+  (alexandria:if-let ((hit (hit-test
+                            (make-ray :origin origin :direction direction)
+                            quad
+                            (make-interval 0.001 #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
     (let ((distance-squared (* (hit-record-time hit)
                                (hit-record-time hit)
                                (vec3-length-squared direction)))
@@ -321,20 +314,14 @@ Returns a `hit-record' or `nil'."))
 
 ;;;; Translate
 
-;;; TODO: This is a dumb constructor name, but I think the struct
-;;; representation makes sense? Hah, although another representation that
-;;; (might) work would be having instances (translation, rotation etc) as CLOS
-;;; mixins and using method combinations to handle the translations between
-;;; world and object spaces. It's probably dumb but I'm interested to see how
-;;; it would work and/or look.
 (defstruct (translate
             (:constructor make-translate
                 (&key object offset
                  &aux
                    (aabb (aabb+ (bounding-box object) offset)))))
-  object
-  (offset (make-vec3 0 0 0) :type vec3)
-  (aabb (make-aabb) :type aabb))
+  (object nil :read-only t)
+  (offset (make-vec3 0 0 0) :type vec3 :read-only t)
+  (aabb (make-aabb) :type aabb :read-only t))
 
 (defmethod hit-test (ray (translate translate) ray-interval)
   (let ((offset-ray (copy-ray ray)))
@@ -348,8 +335,6 @@ Returns a `hit-record' or `nil'."))
 
 ;;;; Rotations
 
-;; TODO: As the name suggests, rotates only in the Y axis. Surely we just use
-;; matrices here and move on with our lives, right? Right?
 (defstruct (rotate-y
             (:constructor make-rotate-y
                 (&key object angle
@@ -384,10 +369,10 @@ Returns a `hit-record' or `nil'."))
                                                   (point3-z min) (min (point3-z min) new-z)
                                                   (point3-z max) (max (point3-z max) new-z))))
                                finally (return (make-aabb-from-points min max)))))))
-  object
-  (sin-theta 0d0 :type double-float)
-  (cos-theta 0d0 :type double-float)
-  (aabb (make-aabb) :type aabb))
+  (object nil :read-only t)
+  (sin-theta 0d0 :type double-float :read-only t)
+  (cos-theta 0d0 :type double-float :read-only t)
+  (aabb (make-aabb) :type aabb :read-only t))
 
 (defmethod hit-test (ray (rotate rotate-y) ray-interval)
   ;; Transform the ray from world space to object space.
@@ -428,9 +413,9 @@ Returns a `hit-record' or `nil'."))
                &aux
                  (negative-inverse-density (/ -1d0 (coerce density 'double-float)))
                  (phase-function (make-isotropic :texture texture)))))
-  boundary
-  (negative-inverse-density 0d0 :type double-float)
-  phase-function)
+  (boundary nil :read-only t)
+  (negative-inverse-density 0d0 :type double-float :read-only t)
+  (phase-function nil :read-only t))
 
 
 (defmethod hit-test (ray (medium constant-medium) ray-interval)
@@ -442,8 +427,8 @@ Returns a `hit-record' or `nil'."))
     (alexandria:when-let
         ((rec-2 (hit-test ray
                           (constant-medium-boundary medium)
-                          (make-interval :min (+ (hit-record-time rec-1) 0.0001d0)
-                                         :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
+                          (make-interval (+ (hit-record-time rec-1) 0.0001)
+                                         #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))))
       (alexandria:maxf (hit-record-time rec-1) (interval-min ray-interval))
       (alexandria:minf (hit-record-time rec-2) (interval-max ray-interval))
       (unless (>= (hit-record-time rec-1) (hit-record-time rec-2))

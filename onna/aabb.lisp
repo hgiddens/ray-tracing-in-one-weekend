@@ -20,29 +20,28 @@ Used to ensure that AABBs don't have zero volume."
                 (a b
                  &aux
                    (x (let ((ax (point3-x a)) (bx (point3-x b)))
-                        (pad-to-minimum (make-interval :min (min ax bx)
-                                                       :max (max ax bx)))))
+                        (pad-to-minimum (make-interval (min ax bx) (max ax bx)))))
                    (y (let ((ay (point3-y a)) (by (point3-y b)))
-                        (pad-to-minimum (make-interval :min (min ay by)
-                                                       :max (max ay by)))))
+                        (pad-to-minimum (make-interval (min ay by) (max ay by)))))
                    (z (let ((az (point3-z a)) (bz (point3-z b)))
-                        (pad-to-minimum (make-interval :min (min az bz)
-                                                       :max (max az bz)))))))
+                        (pad-to-minimum (make-interval (min az bz) (max az bz)))))))
             (:constructor make-aabb-from-aabbs
                 (a b
                  &aux
                    (x (combine-intervals (aabb-x a) (aabb-x b)))
                    (y (combine-intervals (aabb-y a) (aabb-y b)))
                    (z (combine-intervals (aabb-z a) (aabb-z b))))))
-  (x (empty-interval) :type interval)
-  (y (empty-interval) :type interval)
-  (z (empty-interval) :type interval))
+  (x (empty-interval) :type interval :read-only t)
+  (y (empty-interval) :type interval :read-only t)
+  (z (empty-interval) :type interval :read-only t))
 
 (defun hit-test-aabb (ray aabb time)
   (setf time (copy-interval time))
   (loop with ray-origin = (ray-origin ray)
         with ray-direction = (ray-direction ray)
-        ;; TODO: is there a nice way to not use slot-value here?
+        ;; I think it would be "nicer" to not be using slot-value here, but
+        ;; this works and unless it turns out to be something that SBCL
+        ;; struggles to optimise, I think I'm just going to leave it as is.
         for axis in '(x y z)
         as interval = (slot-value aabb axis)
         as 1/direction-axis = (/ (slot-value ray-direction axis))

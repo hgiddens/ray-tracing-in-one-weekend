@@ -1,9 +1,10 @@
 (in-package #:onna)
 
 (defstruct (colour (:constructor make-colour (r g b)))
-  ;; TODO: The book explicitly has colours with values beyond [0,1] to allow
-  ;; lights bright enough to be useful to be created; these do get clamped
-  ;; down to [0,1] in colour-8bit. An obvious thing to look into is HDR.
+  "RGB colour.
+
+Normal values are in the range [0, 1], but values beyond this range are
+supported, principally to control the brightness of lights."
   (r 0 :type (real 0))
   (g 0 :type (real 0))
   (b 0 :type (real 0)))
@@ -40,3 +41,11 @@
       (setf r (* r (colour-r d))
             g (* g (colour-g d))
             b (* b (colour-b d))))))
+
+(defun combine-colours (&rest cs)
+  "Additively combines all the colours CS."
+  (let ((s (make-colour 0 0 0)))
+    (dolist (c cs s)
+      (incf (colour-r s) (colour-r c))
+      (incf (colour-g s) (colour-g c))
+      (incf (colour-b s) (colour-b c)))))

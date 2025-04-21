@@ -8,13 +8,9 @@
 ;;; from the PNG library.
 
 (defun read-png (stream)
-  "Reads an image from STREAM."
+  "Reads a PNG image from STREAM."
   (flet ((adjust-channel (x bit-depth)
-           ;; TODO: Look for, use gamma information in the file.
            (expt (/ x (expt 2 bit-depth)) 2)))
-    ;; We ignore that the PNG might have a 16 bit channel depth, because we
-    ;; convert everything to colour instances anyway, which are reals.
-    ;; TODO: Which is lossy, which maybe I care about one day?
     (loop with png = (png:decode stream)
           with depth = (png:image-bit-depth png)
           with image = (make-array (list (png:image-height png)
@@ -31,14 +27,6 @@
                                             (adjust-channel b depth))
                    do (setf (aref image j i) colour))
           finally (return image))))
-
-(defun write-ppm (image &optional (stream *standard-output*))
-  "Writes IMAGE to STREAM in PPM format."
-  (destructuring-bind (image-height image-width) (array-dimensions image)
-    (format stream "P3~%~D ~D ~%255~%" image-width image-height)
-    (loop for j from 0 below image-height do
-      (loop for i from 0 below image-width do
-        (format stream "~{~D ~D ~D~%~}" (colour-8bit (gamma-2 (aref image j i))))))))
 
 (defun write-png (image stream)
   (destructuring-bind (image-height image-width) (array-dimensions image)

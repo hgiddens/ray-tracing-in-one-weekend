@@ -71,12 +71,6 @@
         until (and (< 1d-160 length-squared) (<= length-squared 1d0))
         finally (return (scaled-vec3 p (/ (sqrt length-squared))))))
 
-(defun near-zero-vec3-p (v)
-  (let ((threshold 1d-8)) ; TODO: defconstant?
-    (and (< (abs (vec3-x v)) threshold)
-         (< (abs (vec3-y v)) threshold)
-         (< (abs (vec3-z v)) threshold))))
-
 (defun reflect (v n)
   "Reflects vector V with regard to surface normal N."
   (vec3- v (scaled-vec3 n (* 2 (dot-product v n)))))
@@ -116,12 +110,7 @@
 (defstruct (interval
             (:constructor empty-interval)
             (:constructor make-interval
-                ;; TODO: as written, this shouldn't be using
-                ;; kwargs. Alternatively, keep using kwargs but have min
-                ;; default to -inf and max to inf, so that it's easy to make
-                ;; an interval with only one end. This would be useful for the
-                ;; constant-medium hit-test implementation.
-                (&key min max
+                (min max
                  &aux
                    (min (coerce min 'double-float))
                    (max (coerce max 'double-float)))))
@@ -132,8 +121,8 @@
 
 (defun combine-intervals (a b)
   "Builds an `interval' tightly enclosing the input intervals A and B."
-  (make-interval :min (min (interval-min a) (interval-min b))
-                 :max (max (interval-max a) (interval-max b))))
+  (make-interval (min (interval-min a) (interval-min b))
+                 (max (interval-max a) (interval-max b))))
 
 (defun interval-contains (i x)
   (declare (type double-float x))
@@ -143,10 +132,9 @@
   (declare (type double-float x))
   (< (interval-min i) x (interval-max i)))
 
-;;; TODO: defconst? But let's see how it's used first?
 (defun universe-interval ()
-  (make-interval :min #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY
-                 :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))
+  (make-interval #.SB-EXT:DOUBLE-FLOAT-NEGATIVE-INFINITY
+                 #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY))
 
 (defun clamp-to-interval (i d)
   (declare (type double-float d))
@@ -154,13 +142,13 @@
 
 (defun expand-interval (i delta)
   (let ((padding (/ delta 2d0)))
-    (make-interval :min (- (interval-min i) padding)
-                   :max (+ (interval-max i) padding))))
+    (make-interval (- (interval-min i) padding)
+                   (+ (interval-max i) padding))))
 
 (defun interval-size (i)
   (- (interval-max i) (interval-min i)))
 
 (defun interval+ (i d)
   "Shifts interval I by delta D."
-  (make-interval :min (+ (interval-min i) d)
-                 :max (+ (interval-max i) d)))
+  (make-interval (+ (interval-min i) d)
+                 (+ (interval-max i) d)))

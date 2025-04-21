@@ -1,61 +1,61 @@
 (in-package :onna)
 
 (defstruct (scatter-record
-            (:constructor)
-            (:constructor make-diffuse-scatter-record (&key attenuation pdf))
-            (:constructor make-specular-scatter-record (&key attenuation ray
-                                                        &aux (skip-pdf-ray ray))))
-  (attenuation (make-colour 0 0 0) :type colour)
-  pdf
-  (skip-pdf-ray nil :type (or ray null)))
+            (:constructor make-diffuse-scatter-record
+                (&key attenuation pdf))
+            (:constructor make-specular-scatter-record
+                (&key attenuation ray
+                 &aux (skip-pdf-ray ray))))
+  (attenuation (make-colour 0 0 0) :type colour :read-only t)
+  (pdf nil :read-only t)
+  (skip-pdf-ray nil :type (or ray null) :read-only t))
 
-(defgeneric emitted (material ray hit u v p)
-  (:documentation "Colour emitted by MATERIAL at point P and texture coördinates U,V."))
+(defgeneric emitted-by-material (material ray hit)
+  (:documentation "Colour emitted by MATERIAL for RAY hitting at HIT.")
+  ;; All materials are capable of emitting light, so we need to able to test
+  ;; everything, but at the moment only a single defined material actually
+  ;; emits light, so I'm just going to define the default here rather than
+  ;; manually specifying it for every material.
+  ;;
+  ;; TODO: feels weird that things either have emitted-by-material or
+  ;; scatter-by-material implemented. The no-op scatter-by-material
+  ;; implementation for diffuse-light is the only thing that returns nil from
+  ;; scatter-by-material, so a better approach here would alow that to be
+  ;; tidied up.
+  (:method (material ray hit)
+    (declare (ignore ray hit))
+    (make-colour 0 0 0)))
 
-(defgeneric scatter* (material ray hit-point hit-normal hit-front-face hit-u hit-v))
+(defun emitted (ray hit)
+  "The emitted colour from RAY hitting at HIT."
+  (emitted-by-material (hit-record-material hit) ray hit))
 
-;;; TODO: I'm only bothering to define this where the book tells me to for
-;;; now, so e.g. the null material isn't going to have an implementation for
-;;; this. Don't know if that means I want to remove the null material or work
-;;; out what to do here.
-(defgeneric scattering-pdf (material ray hit scattered-ray))
+(defgeneric scatter-by-material (material ray hit))
 
 (defun scatter (ray hit)
   "Scatters RAY according to HIT.
 
 Returns a `scatter-record' or `nil'."
-  ;; TODO: There maybe is a nicer way to do this with CLOS? I don't know if we
-  ;; can dispatch on a slot of an argument, and since we have to get the
-  ;; material out of the hit-record anyway it seems dumb to then pass the
-  ;; hit-record into scatter*? On the other hand, that's what the C++ code
-  ;; does, it's basically:
-  ;;     hit->material->scatter(ray, hit);
-  (scatter* (hit-record-material hit)
-            ray
-            (hit-record-point hit)
-            (hit-record-normal hit)
-            (hit-record-front-face hit)
-            (hit-record-u hit)
-            (hit-record-v hit)))
+  (scatter-by-material (hit-record-material hit) ray hit))
+
+;;; TODO: I'm only bothering to define this where the book tells me to for
+;;; now, so e.g. the specular materials aren't going to have an implementation
+;;; for this. I'm not sure that this should exist at all? Should the
+;;; scatter-record just contain a scattering-pdf value as well?
+(defgeneric scattering-pdf (material ray hit scattered-ray))
 
 ;;;; Lambertian
 
 (defstruct lambertian
-  (texture (make-colour 0 0 0)))
+  (texture (make-colour 0 0 0) :read-only t))
 
-(defmethod emitted ((material lambertian) ray hit u v p)
-  (declare (ignore ray hit u v p))
-  (make-colour 0 0 0))
-
-(defmethod scatter* ((material lambertian) ray hit-point hit-normal hit-front-face hit-u hit-v)
-  (declare (ignore hit-front-face))
-  ;; TODO: We used to have stuff here using near-zero-vec3-p that is no longer
-  ;; necessary (because now we're using the PDF for generating scatter
-  ;; directions, we don't need to worry about degenerate directions). Maybe
-  ;; this can be cleaned up now?
-  (make-diffuse-scatter-record
-   :attenuation (texture-value (lambertian-texture material) hit-u hit-v hit-point)
-   :pdf (make-cosine-pdf hit-normal)))
+(defmethod scatter-by-material ((material lambertian) ray hit)
+  (declare (ignore ray))
+  (make-diffuse-scatter-record :attenuation (texture-value (lambertian-texture material)
+                                                           (hit-record-u hit)
+                                                           (hit-record-v hit)
+                                                           (hit-record-point hit))
+                               :pdf (make-cosine-pdf (hit-record-normal hit))))
 
 (defmethod scattering-pdf ((material lambertian) ray hit scattered-ray)
   (declare (ignore ray))
@@ -66,24 +66,14 @@ Returns a `scatter-record' or `nil'."
 ;;;; Metal
 
 (defstruct metal
-  (albedo (make-colour 0 0 0) :type colour)
-  (fuzz 0d0 :type (double-float 0d0 1d0)))
+  (albedo (make-colour 0 0 0) :type colour :read-only t)
+  (fuzz 0d0 :type (double-float 0d0 1d0) :read-only t))
 
-(defmethod emitted ((material metal) ray hit u v p)
-  (declare (ignore ray hit u v p))
-  (make-colour 0 0 0))
-
-(defmethod scatter* ((material metal) ray hit-point hit-normal hit-front-face hit-u hit-v)
-  (declare (ignore hit-front-face hit-u hit-v))
-  (let* ((reflected (vec3+ (unit-vec3 (reflect (ray-direction ray) hit-normal))
-                           (scaled-vec3 (random-unit-vec3) (metal-fuzz material)))))
-    ;; TODO: we used to care about scattering into the object (there was a
-    ;; test making sure the dot product of the scatter ray and the hit normal
-    ;; was positive) but we've lost that and I'm not sure why. I also think
-    ;; this means that all the scatter methods always return a non-nil value,
-    ;; so we could lose the test.
+(defmethod scatter-by-material ((material metal) ray hit)
+  (let ((reflected (vec3+ (unit-vec3 (reflect (ray-direction ray) (hit-record-normal hit)))
+                          (scaled-vec3 (random-unit-vec3) (metal-fuzz material)))))
     (make-specular-scatter-record :attenuation (metal-albedo material)
-                                  :ray (make-ray :origin hit-point
+                                  :ray (make-ray :origin (hit-record-point hit)
                                                  :direction reflected
                                                  :time (ray-time ray)))))
 
@@ -92,11 +82,7 @@ Returns a `scatter-record' or `nil'."
 (defstruct dielectric
   ;; Refractive index in vacuum or air, or the ratio of the material's
   ;; refractive index over the refractive index of the enclosing media.
-  (refraction-index 0d0 :type double-float))
-
-(defmethod emitted ((material dielectric) ray hit u v p)
-  (declare (ignore ray hit u v p))
-  (make-colour 0 0 0))
+  (refraction-index 0d0 :type double-float :read-only t))
 
 (defun reflectance (cosine refraction-index)
   "Schlick's approximation for reflectance."
@@ -104,50 +90,50 @@ Returns a `scatter-record' or `nil'."
     (setf r0 (* r0 r0))
     (+ r0 (* (- 1d0 r0) (expt (- 1 cosine) 5)))))
 
-(defmethod scatter* ((material dielectric) ray hit-point hit-normal hit-front-face hit-u hit-v)
-  (declare (ignore hit-u hit-v))
+(defmethod scatter-by-material ((material dielectric) ray hit)
   (let* ((ri (let ((r (dielectric-refraction-index material)))
-               (if hit-front-face (/ r) r)))
+               (if (hit-record-front-face hit) (/ r) r)))
          (unit-direction (unit-vec3 (ray-direction ray)))
-         (cos-θ (min (dot-product (vec3- unit-direction) hit-normal) 1d0))
+         (cos-θ (min (dot-product (vec3- unit-direction) (hit-record-normal hit)) 1d0))
          (sin-θ (sqrt (- 1d0 (* cos-θ cos-θ))))
-         (cannot-refract (> (* ri sin-θ) 1d0))
-         (direction (if (or cannot-refract
+         (direction (if (or (> (* ri sin-θ) 1d0) ; can't refract
                             (> (reflectance cos-θ ri) (random 1d0)))
-                        (reflect unit-direction hit-normal) ; Cannot refract
-                        (refract unit-direction hit-normal ri))))
+                        (reflect unit-direction (hit-record-normal hit))
+                        (refract unit-direction (hit-record-normal hit) ri))))
     (make-specular-scatter-record :attenuation (make-colour 1 1 1)
-                                  :ray (make-ray :origin hit-point
+                                  :ray (make-ray :origin (hit-record-point hit)
                                                  :direction direction
                                                  :time (ray-time ray)))))
 
 ;;;; Diffuse light
 
 (defstruct diffuse-light
-  texture)
+  (texture nil :read-only t))
 
-;;; TODO: it's probably a code smell that all these materials have either an
-;;; implementation for emitted or scatter, but not both.
-(defmethod emitted ((light diffuse-light) ray hit u v p)
+(defmethod emitted-by-material ((light diffuse-light) ray hit)
   (declare (ignore ray))
   (if (hit-record-front-face hit)
-      (texture-value (diffuse-light-texture light) u v p)
+      (texture-value (diffuse-light-texture light)
+                     (hit-record-u hit)
+                     (hit-record-v hit)
+                     (hit-record-point hit))
       (make-colour 0 0 0)))
 
-(defmethod scatter* ((light diffuse-light) ray hit-point hit-normal hit-front-face hit-u hit-v)
+(defmethod scatter-by-material ((light diffuse-light) ray hit)
+  (declare (ignore ray hit))
   nil)
 
 ;;;; Isotropic
 
-(defstruct isotropic texture)
+(defstruct isotropic
+  (texture nil :read-only t))
 
-(defmethod emitted ((iso isotropic) ray hit u v p)
-  (declare (ignore ray hit u v p))
-  (make-colour 0 0 0))
-
-(defmethod scatter* ((iso isotropic) ray hit-point hit-normal hit-front-face hit-u hit-v)
-  (declare (ignore ray hit-normal hit-front-face))
-  (make-diffuse-scatter-record :attenuation (texture-value (isotropic-texture iso) hit-u hit-v hit-point)
+(defmethod scatter-by-material ((iso isotropic) ray hit)
+  (declare (ignore ray))
+  (make-diffuse-scatter-record :attenuation (texture-value (isotropic-texture iso)
+                                                           (hit-record-u hit)
+                                                           (hit-record-v hit)
+                                                           (hit-record-point hit))
                                :pdf (make-sphere-pdf)))
 
 (defmethod scattering-pdf ((iso isotropic) ray hit scattered-ray)

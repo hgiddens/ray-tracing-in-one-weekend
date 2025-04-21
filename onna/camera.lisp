@@ -1,20 +1,5 @@
 (in-package :onna)
 
-;;;; I'm considering the camera to essentially be a transformation from
-;;;; viewport coördinates to one or more rays. This means that in contrast to
-;;;; the book, the camera itself doesn't know about e.g. anti-aliasing. I'll
-;;;; change this later if I need to.
-;;;;
-;;;; Yeah looking at the start of book 1, chapter 7, we see:
-;;;;
-;;;;     The camera class will be responsible for two important jobs
-;;;;     1. Construct and dispatch rays into the world.
-;;;;     2. Use the results of these rays to construct the rendered image.
-;;;;
-;;;; I'm not exactly wholeheartedly commited to the single responsiblity
-;;;; principle, but it seems to me like the class in the book is doing too
-;;;; much.
-
 (defstruct (camera (:constructor nil))
   (centre (make-point3 0 0 0) :type point3)
   (samples-per-pixel 1 :type (integer 0))
@@ -104,49 +89,49 @@
             (camera-defocus-disc-v camera) defocus-disc-v)
       camera)))
 
+(defconstant +shadow-acne-minimum-threshold+ 0.001)
+
 (defun ray-colour (ray world lights depth background-colour)
-  ;; TODO: This function is gross now.
-  ;; If we've exceeded the ray bounce limit, no more light is gathered.
-  (when (<= depth 0)
-    (return-from ray-colour (make-colour 0 0 0)))
-  (let ((interval (make-interval :min 0.001 ; to deal with shadow acne
-                                 :max #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
-    (alexandria:if-let ((hit (hit-test ray world interval)))
-      (let ((colour-from-emission (emitted (hit-record-material hit)
-                                           ray
-                                           hit  ; TODO: this is so dumb
-                                           (hit-record-u hit)
-                                           (hit-record-v hit)
-                                           (hit-record-point hit))))
-        (alexandria:if-let ((scattered (scatter ray hit)))
-          (if (null (scatter-record-pdf scattered))
-              (attenuate (ray-colour (scatter-record-skip-pdf-ray scattered)
-                                     world
-                                     lights
-                                     (1- depth)
-                                     background-colour)
-                         (scatter-record-attenuation scattered))
-              (multiple-value-bind (direction pdf-value)
-                  (pdf-direction (make-mixture-pdf
-                                  (make-hittable-pdf :objects lights :origin (hit-record-point hit))
-                                  (scatter-record-pdf scattered)))
-                (let* ((scattered-ray (make-ray :origin (hit-record-point hit)
-                                                :direction direction
-                                                :time (ray-time ray)))
-                       (scattering-pdf (scattering-pdf (hit-record-material hit)
-                                                       ray
-                                                       hit
-                                                       scattered-ray))
-                       (sample-colour (ray-colour scattered-ray world lights (1- depth) background-colour))
-                       (colour-from-scatter (attenuate sample-colour
-                                                       (scatter-record-attenuation scattered)
-                                                       (let ((c (/ scattering-pdf pdf-value)))
-                                                         (make-colour c c c)))))
-                  (make-colour (+ (colour-r colour-from-emission) (colour-r colour-from-scatter))
-                               (+ (colour-g colour-from-emission) (colour-g colour-from-scatter))
-                               (+ (colour-b colour-from-emission) (colour-b colour-from-scatter))))))
-          colour-from-emission))
-      background-colour)))
+  (labels ((next (r)
+             (ray-colour r world lights (1- depth) background-colour))
+           (handle-ray ()
+             (let ((interval (make-interval +shadow-acne-minimum-threshold+
+                                            #.SB-EXT:DOUBLE-FLOAT-POSITIVE-INFINITY)))
+               (alexandria:if-let ((hit (hit-test ray world interval)))
+                 (handle-hit hit)
+                 background-colour)))
+           (handle-hit (hit)
+             (let ((colour-from-emission (emitted ray hit)))
+               (alexandria:if-let ((scattered (scatter ray hit)))
+                 (handle-scatter hit scattered colour-from-emission)
+                 colour-from-emission)))
+           (handle-scatter (hit scattered colour-from-emission)
+             (if (null (scatter-record-pdf scattered))
+                 (attenuate (next (scatter-record-skip-pdf-ray scattered))
+                            (scatter-record-attenuation scattered))
+                 (combine-colours colour-from-emission
+                                  (let ((pdf (make-mixture-pdf
+                                              (make-hittable-pdf :objects lights
+                                                                 :origin (hit-record-point hit))
+                                              (scatter-record-pdf scattered))))
+                                    (colour-from-scatter hit scattered pdf)))))
+           (colour-from-scatter (hit scattered pdf)
+             (multiple-value-bind (direction pdf-value) (pdf-direction pdf)
+               (let* ((scattered-ray (make-ray :origin (hit-record-point hit)
+                                               :direction direction
+                                               :time (ray-time ray)))
+                      (scattering-pdf (scattering-pdf (hit-record-material hit)
+                                                      ray
+                                                      hit
+                                                      scattered-ray)))
+                 (attenuate (next scattered-ray)
+                            (scatter-record-attenuation scattered)
+                            (let ((c (/ scattering-pdf pdf-value)))
+                              (make-colour c c c)))))))
+    (if (plusp depth)
+        (handle-ray)
+        ;; Ray recursion limit exceeded, no more light is generated.
+        (make-colour 0 0 0))))
 
 (defun defocus-disc-sample (camera)
   (loop for u-scale = (1- (random 2d0))

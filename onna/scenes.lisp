@@ -169,16 +169,6 @@
       (make-quad :q (make-point3 0 0 0) :u (make-vec3 555 0 0) :v (make-vec3 0 0 555) :material white)
       (make-quad :q (make-point3 555 555 555) :u (make-vec3 -555 0 0) :v (make-vec3 0 0 -555) :material white)
       (make-quad :q (make-point3 0 0 555) :u (make-vec3 555 0 0) :v (make-vec3 0 555 0) :material white)
-      ;; TODO: Interesting thought for later: BVH construction basically takes
-      ;; a sequence of hittables and builds the bvh out of that, but with the
-      ;; the make-box calls here, we now have a nested sequence. This will
-      ;; actually work fine, the BVH build process just won't look into the
-      ;; child sequences but there's no reason it couldn't. Worth some sort of
-      ;; scene compilation step?
-      ;;
-      ;; TODO: This reveals an annoyance, we have ways of position things other
-      ;; than at the origin, and we have ways to translate them. Seems
-      ;; suboptimal.
       (let ((box (make-box :a (make-point3 0 0 0) :b (make-point3 165 330 165) :material white)))
         (make-translate :object (make-rotate-y :object box :angle 15)
                         :offset (make-vec3 265 0 295)))
@@ -189,8 +179,7 @@
      ;; Lights
      (vector
       (make-quad :q (make-point3 343 554 332) :u (make-vec3 -130 0 0) :v (make-vec3 0 0 -105))
-      (make-sphere :centre (make-point3 190 90 190) :radius 90))
-     )))
+      (make-sphere :centre (make-point3 190 90 190) :radius 90)))))
 
 (defun cornell-smoke ()
   "Book 2 chapter 9.2."
