@@ -8,10 +8,12 @@
                  &aux
                    (front-face (< (dot-product (ray-direction ray) outward-normal) 0))
                    (normal (if front-face outward-normal (vec3- outward-normal))))))
-  (point (make-point3 0 0 0) :type point3 :read-only t)
+  ;; TODO: Think about whether making things read-only as aggressively as I've
+  ;; done makes sense.
+  (point (make-point3 0 0 0) :type point3)
   ;; The normal, facing against the incident ray
-  (normal (make-vec3 0 0 0) :type vec3 :read-only t)
-  (time 0d0 :type double-float :read-only t)
+  (normal (make-vec3 0 0 0) :type vec3)
+  (time 0d0 :type double-float)
   (u 0d0 :type double-float :read-only t)
   (v 0d0 :type double-float :read-only t)
   (front-face nil :read-only t)
